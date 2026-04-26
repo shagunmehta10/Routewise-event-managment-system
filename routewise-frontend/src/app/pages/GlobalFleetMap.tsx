@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Navbar } from '../components/Navbar';
-import TrafficTicker from '../components/TrafficTicker';
+import { TrafficTicker } from '../components/TrafficTicker';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
