@@ -794,9 +794,9 @@ export const systemAPI = {
 
 export const USE_REAL_API = true;
 
-// Real API configuration (for future use)
+// Real API configuration
 export const API_CONFIG = {
-  baseURL: 'https://routewise-event-managment-system-1.onrender.com',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000',
   timeout: 10000,
 };
 
