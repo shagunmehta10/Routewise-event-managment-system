@@ -46,24 +46,11 @@ export function LocationSearch({
     timerRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        // Primary: Nominatim with better params for Indian cities (especially Dehradun)
-        const dehradunViewbox = '77.8,30.5,78.2,30.2'; // l,t,r,b
-        const url = `https://nominatim.openstreetmap.org/search`
-          + `?q=${encodeURIComponent(value)}`
-          + `&format=json&addressdetails=1&limit=6`
-          + `&countrycodes=in`           // bias to India
-          + `&viewbox=${dehradunViewbox}` // bias to Dehradun
-          + `&accept-language=en`;
-        const res  = await fetch(url, { headers: { 'Accept-Language': 'en' } });
-        const data: SearchResult[] = await res.json();
+        const data = await routeAPI.searchLocations(value);
         setResults(data);
         setActiveIdx(-1);
-      } catch {
-        // Fallback to your existing routeAPI
-        try {
-          const data = await routeAPI.searchLocations(value);
-          setResults(data);
-        } catch { /* silent */ }
+      } catch (err) {
+        console.error("Location search failed:", err);
       } finally {
         setLoading(false);
       }

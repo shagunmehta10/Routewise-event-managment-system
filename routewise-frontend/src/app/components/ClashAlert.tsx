@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, Clock, Zap } from 'lucide-react';
 import type { ClashResult } from '../../utils/clashDetector';
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Type, Loader2, ChevronRight, MapPin, Shuffle } from 'lucide-react';
+import { Type, Loader2, ChevronRight, MapPin } from 'lucide-react';
 import { eventAPI, venueAPI } from '../../utils/api';
 import { toast } from 'sonner';
 import '../styles/create-event.css';
@@ -17,10 +17,7 @@ export function CreateEvent({ onEventCreated }: CreateEventProps) {
     venueId: '',
   });
   const [venues, setVenues] = useState<any[]>([]);
-  const [clashResult, setClashResult] = useState<ClashResult | null>(null);
-  const [pendingSubmit, setPendingSubmit] = useState(false);
-
-  React.useEffect(() => {
+  const [clashResult, setClashResult] = useState<ClashResult | null>(null);  React.useEffect(() => {
     venueAPI.getAllVenues().then(setVenues).catch(console.error);
   }, []);
 
@@ -73,7 +70,6 @@ export function CreateEvent({ onEventCreated }: CreateEventProps) {
 
   const handleConfirmWithPenalty = async () => {
     setClashResult(null);
-    setPendingSubmit(false);
     setSubmitting(true);
     await doCreateEvent(clashResult?.penaltyPoints ?? 0);
   };
@@ -93,7 +89,6 @@ export function CreateEvent({ onEventCreated }: CreateEventProps) {
 
       if (clash.clashes) {
         setClashResult(clash);
-        setPendingSubmit(true);
         setSubmitting(false);
         return; // pause — show modal
       }
@@ -188,7 +183,7 @@ export function CreateEvent({ onEventCreated }: CreateEventProps) {
         <ClashAlert
           result={clashResult}
           onConfirm={handleConfirmWithPenalty}
-          onCancel={() => { setClashResult(null); setPendingSubmit(false); }}
+          onCancel={() => { setClashResult(null); }}
         />
       )}
     </div>

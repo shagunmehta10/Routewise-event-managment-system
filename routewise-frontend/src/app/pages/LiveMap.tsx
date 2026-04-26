@@ -3,6 +3,8 @@ import { Navbar } from '../components/Navbar';
 import { LiveTracking } from '../components/LiveTracking';
 import { Navigation2, Users, AlertCircle, TrendingUp, AlertTriangle, Layers, Map as MapIcon } from 'lucide-react';
 import { eventAPI } from '../../utils/api';
+import socketService from '../../utils/socket';
+
 import '../styles/live-map.css';
 
 interface TrackingStats {
@@ -36,10 +38,15 @@ export default function LiveMap() {
     };
     fetchEvents();
     
-    // Auto-refresh events every 30 seconds to capture new events
-    const interval = setInterval(fetchEvents, 30000);
-    return () => clearInterval(interval);
+    // Listen for real-time updates
+    socketService.connect();
+    socketService.on('refreshEvents', fetchEvents);
+
+    return () => {
+      socketService.off('refreshEvents', fetchEvents);
+    };
   }, [selectedEvent]);
+
 
   // Simulate real-time stats updates
   useEffect(() => {

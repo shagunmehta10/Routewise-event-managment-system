@@ -71,18 +71,32 @@ const TILE_LAYERS = {
     subdomains: ['a', 'b', 'c'],
     opacity: 1,
   },
+  light: {
+    label: 'Light Command',
+    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    attribution: '© OpenStreetMap, © CARTO',
+    subdomains: 'abcd',
+    opacity: 1,
+  },
+  traffic: {
+    label: 'Live Traffic',
+    url: 'https://mt1.google.com/vt/lyrs=m,traffic&x={x}&y={y}&z={z}',
+    attribution: '© Google Maps',
+    subdomains: '',
+    opacity: 1,
+  },
   dark: {
-    label: 'Dark Mode',
+    label: 'Stealth Mode (Dark)',
     url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
     attribution: '© Stadia Maps, © OpenMapTiles, © OpenStreetMap contributors',
-    subdomains: undefined,
+    subdomains: '',
     opacity: 1,
   },
   satellite: {
     label: 'Satellite',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     attribution: '© Esri, Maxar, Earthstar Geographics',
-    subdomains: undefined,
+    subdomains: '',
     opacity: 1,
   },
 };
@@ -143,15 +157,26 @@ export default function GlobalFleetMap() {
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [showAllAlternatives, setShowAllAlternatives] = useState(false);
   const [clashCount, setClashCount] = useState(0);
-  const [tileLayer, setTileLayer] = useState<keyof typeof TILE_LAYERS>('dark');
+  const [tileLayer, setTileLayer] = useState<keyof typeof TILE_LAYERS>('traffic');
   const [showLayerPicker, setShowLayerPicker] = useState(false);
+
+  // Auto-set theme based on privacy settings
+  useEffect(() => {
+    const userJson = localStorage.getItem('user');
+    const user = userJson ? JSON.parse(userJson) : null;
+    if (user?.settings?.privacy === 'private') {
+      setTileLayer('dark');
+    } else {
+      setTileLayer('traffic'); // Default to traffic for public mode
+    }
+  }, []);
 
   const fetchMapData = async (isInitial = false) => {
     if (isInitial) setLoading(true);
     try {
       const userJson = localStorage.getItem('user');
       const user = userJson ? JSON.parse(userJson) : null;
-      const rawEvents = await eventAPI.getAllEvents(user?.id);
+      const rawEvents = await eventAPI.getAllEvents(); // Fetch ALL global events, not just user's own
 
       const initialEvents: FleetEvent[] = rawEvents.map((e: any, i: number) => ({
         ...e,
@@ -537,6 +562,7 @@ export default function GlobalFleetMap() {
             zoom={12}
             style={{ width: '100%', height: '100%' }}
             zoomControl={false}
+            scrollWheelZoom={true}
           >
             <TileLayer
               url={currentTile.url}
@@ -575,6 +601,11 @@ export default function GlobalFleetMap() {
                           <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: '6px' }}>
                             {event.startLocation}
                           </div>
+                          {activeAlt?.distance && (
+                            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: event.color, marginBottom: '8px' }}>
+                              📍 Distance: {activeAlt.distance}
+                            </div>
+                          )}
                           {event.clashing && event.clashWith && (
                             <div style={{ fontSize: '0.75rem', color: '#ef4444', background: '#fef2f2', padding: '4px 8px', borderRadius: '4px', marginBottom: '8px' }}>
                               Conflicts with: <strong>{event.clashWith}</strong>

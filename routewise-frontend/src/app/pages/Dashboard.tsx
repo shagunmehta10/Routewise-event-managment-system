@@ -5,6 +5,8 @@ import { Navbar } from '../components/Navbar';
 import { LiveTracking } from '../components/LiveTracking';
 import { EventCard } from '../components/EventCard';
 import { eventAPI } from '../../utils/api';
+import socketService from '../../utils/socket';
+
 import '../styles/dashboard.css';
 
 export default function Dashboard() {
@@ -37,9 +39,19 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchEvents(true);
-    const interval = setInterval(() => fetchEvents(false), 5000);
-    return () => clearInterval(interval);
+
+    // Listen for real-time updates
+    socketService.connect();
+    socketService.on('refreshEvents', () => {
+      console.log('[Socket] Refreshing events due to server notification');
+      fetchEvents(false);
+    });
+
+    return () => {
+      socketService.off('refreshEvents');
+    };
   }, []);
+
 
   return (
     <div className="dashboard-page" style={{ position: 'relative', overflow: 'hidden' }}>

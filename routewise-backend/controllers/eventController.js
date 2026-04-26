@@ -1,4 +1,7 @@
 import pool from "../config/db.js";
+import { emitRefresh } from "../socket/socketUtils.js";
+
+
 
 // Hospital locations for risk detection
 const HOSPITALS = [
@@ -57,22 +60,21 @@ function getCalculatedStatus(row) {
   if (!row.date) return row.status || 'upcoming';
   
   // 1. Get Current IST Time
-  const nowUtc = new Date();
-  const nowIst = new Date(nowUtc.getTime() + (5.5 * 60 * 60 * 1000));
-  const currentMins = nowIst.getUTCHours() * 60 + nowIst.getUTCMinutes();
-  const istDateStr = nowIst.toISOString().split('T')[0]; // "YYYY-MM-DD"
+  const now = new Date();
+  const istDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // "YYYY-MM-DD"
   
-  // 2. Get Event Date String
-  let eventDateStr = "";
-  if (typeof row.date === 'string') {
-    eventDateStr = row.date.split('T')[0];
-  } else {
-    eventDateStr = new Date(row.date).toISOString().split('T')[0];
-  }
+  // Get current minutes in IST
+  const istTimeStr = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false }); // "HH:MM:SS"
+  const [currH, currM] = istTimeStr.split(':').map(Number);
+  const currentMins = currH * 60 + currM;
+  
+  // 2. Get Event IST Date String
+  const eventDateStr = new Date(row.date).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
   const isToday = eventDateStr === istDateStr;
   const isPast = eventDateStr < istDateStr;
   const isFuture = eventDateStr > istDateStr;
+
 
   if (isFuture) return 'upcoming';
   if (isPast) return 'completed';
@@ -93,7 +95,7 @@ function getCalculatedStatus(row) {
       let endMins = eh * 60 + em;
       
       if (endMins < startMins) {
-        // Midnight cross: if current time is after start OR before end
+        // Midnight cross
         if (currentMins >= startMins || currentMins <= endMins) return 'live';
         if (currentMins > endMins && currentMins < startMins) return 'upcoming';
       } else {
@@ -107,6 +109,7 @@ function getCalculatedStatus(row) {
   
   return row.status || 'upcoming';
 }
+
 
 // Helper: normalize PostgreSQL row keys to camelCase for frontend
 function normalizeEvent(row) {
@@ -126,6 +129,7 @@ function normalizeEvent(row) {
     riskScore: calculateRisk(row),
     startCoords: row.start_lat ? [row.start_lat, row.start_lon] : null,
     endCoords: row.end_lat ? [row.end_lat, row.end_lon] : null,
+    is_private: row.is_private || false,
     created_at: row.created_at,
   };
 }
@@ -145,14 +149,15 @@ export const createEvent = async (req, res) => {
 
     // 2. INSERT into events
     const result = await pool.query(
-      `INSERT INTO events (name, description, date, "startLocation", "endLocation", "startTime", "endTime", status, start_lat, start_lon, end_lat, end_lon, event_type, venue_id, user_id, penalty)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
+      `INSERT INTO events (name, description, date, "startLocation", "endLocation", "startTime", "endTime", status, start_lat, start_lon, end_lat, end_lon, event_type, venue_id, user_id, penalty, is_private)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING *`,
       [
         name, 
         appliedPenalty > 0 ? `[CLASH PENALTY: ${appliedPenalty}] ${description || ''}` : description,
         date, startLocation, endLocation, startTime, endTime, "upcoming",
         startCoords?.[0] || null, startCoords?.[1] || null, endCoords?.[0] || null, endCoords?.[1] || null,
-        eventType || 'other', venueId || null, userId || null, appliedPenalty
+        eventType || 'other', venueId || null, userId || null, appliedPenalty,
+        req.body.is_private || false
       ]
     );
     
@@ -165,6 +170,11 @@ export const createEvent = async (req, res) => {
     normalized.riskScore = Math.min(normalized.riskScore + (appliedPenalty / 10), 100);
 
     res.status(201).json(normalized);
+    
+    // Notify clients about new event
+    emitRefresh();
+
+
   } catch (error) {
     console.error("CRITICAL DATABASE ERROR during event creation:", error);
     res.status(500).json({ message: "Server error", detail: error.message });
@@ -213,9 +223,9 @@ export const updateEvent = async (req, res) => {
     console.log("Attempting to update event:", id);
     const result = await pool.query(
       `UPDATE events 
-       SET name = $1, description = $2, date = $3, "startLocation" = $4, "endLocation" = $5, "startTime" = $6, "endTime" = $7 
-       WHERE id = $8 RETURNING *`,
-      [name, description, date, startLocation, endLocation, startTime, endTime, id]
+       SET name = $1, description = $2, date = $3, "startLocation" = $4, "endLocation" = $5, "startTime" = $6, "endTime" = $7, is_private = $8
+       WHERE id = $9 RETURNING *`,
+      [name, description, date, startLocation, endLocation, startTime, endTime, req.body.is_private || false, id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Event not found" });
@@ -223,6 +233,11 @@ export const updateEvent = async (req, res) => {
     const normalized = normalizeEvent(result.rows[0]);
     console.log("Event updated successfully:", id);
     res.json(normalized);
+
+    // Notify clients about updated event
+    emitRefresh();
+
+
   } catch (error) {
     console.error("CRITICAL DATABASE ERROR during event update:", {
       message: error.message,
@@ -243,6 +258,11 @@ export const deleteEvent = async (req, res) => {
   try {
     await pool.query("DELETE FROM events WHERE id = $1", [id]);
     res.json({ message: "Event deleted successfully" });
+
+    // Notify clients about deleted event
+    emitRefresh();
+
+
   } catch (error) {
     console.error("Error deleting event:", error);
     res.status(500).json({ message: "Server error while deleting event" });

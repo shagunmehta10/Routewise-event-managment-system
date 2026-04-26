@@ -1,39 +1,39 @@
 import pool from "../config/db.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import nodemailer from "nodemailer";
+import { Resend } from "resend"; // npm install resend
 
-// ── Email Transporter (Gmail SMTP) ─────────────────────────────────────────
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+// ── Resend Email Client ─────────────────────────────────────────────────────
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 const sendResetEmail = async (toEmail, resetLink) => {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn("[EMAIL] EMAIL_USER or EMAIL_PASS not set — skipping email. Reset link:", resetLink);
+  if (!process.env.RESEND_API_KEY) {
+    console.warn("[EMAIL] RESEND_API_KEY not set — skipping email. Reset link:", resetLink);
     return false;
   }
   try {
-    await transporter.sendMail({
-      from: `"RouteWise" <${process.env.EMAIL_USER}>`,
+    const { data, error } = await resend.emails.send({
+      from: process.env.EMAIL_FROM || "noreply@routewise.app",
       to: toEmail,
       subject: "RouteWise — Password Reset Link",
       html: `
-        <div style="font-family: 'Segoe UI', sans-serif; max-width: 520px; margin: auto; background: #0f172a; padding: 2rem; border-radius: 1rem; color: white;">
-          <h1 style="color: #60a5fa; margin-bottom: 0.5rem;">RouteWise</h1>
-          <p style="color: #94a3b8;">You requested a password reset for your RouteWise account.</p>
-          <a href="${resetLink}" style="display: inline-block; margin-top: 1.5rem; padding: 0.85rem 2rem; background: #3b82f6; color: white; border-radius: 0.75rem; text-decoration: none; font-weight: bold;">
+        <div style="font-family:'Segoe UI',sans-serif;max-width:520px;margin:auto;background:#0f172a;padding:2rem;border-radius:1rem;color:white;">
+          <h1 style="color:#60a5fa;margin-bottom:0.5rem;">RouteWise</h1>
+          <p style="color:#94a3b8;">You requested a password reset for your RouteWise account.</p>
+          <a href="${resetLink}" style="display:inline-block;margin-top:1.5rem;padding:0.85rem 2rem;background:#3b82f6;color:white;border-radius:0.75rem;text-decoration:none;font-weight:bold;">
             Reset My Password
           </a>
-          <p style="color: #64748b; margin-top: 2rem; font-size: 0.85rem;">This link expires in 1 hour. If you did not request this, ignore this email.</p>
+          <p style="color:#64748b;margin-top:2rem;font-size:0.85rem;">This link expires in 1 hour. If you did not request this, ignore this email.</p>
         </div>
       `,
     });
-    console.log(`[EMAIL] Reset link sent to ${toEmail}`);
+
+    if (error) {
+      console.error("[EMAIL] Resend error:", error);
+      return false;
+    }
+
+    console.log(`[EMAIL] Reset email sent to ${toEmail}, ID: ${data.id}`);
     return true;
   } catch (err) {
     console.error("[EMAIL] Failed to send reset email:", err.message);
@@ -58,8 +58,9 @@ export const login = async (req, res) => {
     return res.status(400).json({ message: "Email and password are required" });
   }
   try {
-    console.log(`Login attempt for: ${email}`);
-    const result = await pool.query("SELECT * FROM users WHERE LOWER(email) = LOWER($1)", [email]);
+    const result = await pool.query(
+      "SELECT * FROM users WHERE LOWER(email) = LOWER($1)", [email]
+    );
 
     if (result.rows.length === 0) {
       return res.status(401).json({ message: "Invalid email or password" });
@@ -112,7 +113,9 @@ export const getProfile = async (req, res) => {
 export const register = async (req, res) => {
   const { name, email, password, role } = req.body;
   try {
-    const existingUser = await pool.query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [email]);
+    const existingUser = await pool.query(
+      "SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [email]
+    );
     if (existingUser.rows.length > 0) {
       return res.status(400).json({ message: "Email already exists. Please login instead." });
     }
@@ -132,18 +135,25 @@ export const register = async (req, res) => {
   }
 };
 
-// ── Forgot Password — sends real email ────────────────────────────────────────
+// ── Forgot Password ───────────────────────────────────────────────────────────
 export const forgotPassword = async (req, res) => {
   const { email } = req.body;
   try {
-    const userResult = await pool.query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [email]);
+    const userResult = await pool.query(
+      "SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [email]
+    );
+
+    // Always return 200 — don't reveal whether email exists (security best practice)
     if (userResult.rows.length === 0) {
-      return res.status(404).json({ message: "Email not recognized in the tactical grid." });
+      return res.json({
+        success: true,
+        message: "If that email is registered, a reset link has been sent.",
+      });
     }
 
     const token = crypto.randomBytes(32).toString("hex");
     const expiry = new Date();
-    expiry.setHours(expiry.getHours() + 1);
+    expiry.setHours(expiry.getHours() + 1); // 1-hour expiry
 
     await pool.query(
       "UPDATE users SET reset_token = $1, reset_token_expiry = $2 WHERE id = $3",
@@ -155,23 +165,33 @@ export const forgotPassword = async (req, res) => {
 
     const emailSent = await sendResetEmail(email, resetLink);
 
+    console.log(`[RESET] ${emailSent ? "Email sent" : "Dev fallback"}: ${resetLink}`);
+
     res.json({
       success: true,
       message: emailSent
         ? "Password reset link sent to your email."
-        : "Reset link generated (email not configured — check server logs).",
-      // Dev fallback: include link in response only if email isn't configured
+        : "Reset link generated (RESEND_API_KEY not set — see server logs).",
+      // Only expose link in response when email is not configured (dev mode)
       ...(!emailSent && { link: resetLink }),
     });
   } catch (error) {
     console.error("Forgot password error:", error);
-    res.status(500).json({ message: "Strategic failure during reset request." });
+    res.status(500).json({ message: "Server error during reset request." });
   }
 };
 
 // ── Reset Password ─────────────────────────────────────────────────────────────
 export const resetPassword = async (req, res) => {
   const { password, token } = req.body;
+
+  if (!token || !password) {
+    return res.status(400).json({ message: "Token and new password are required." });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ message: "Password must be at least 8 characters." });
+  }
+
   try {
     const result = await pool.query(
       "SELECT id FROM users WHERE reset_token = $1 AND reset_token_expiry > NOW()",
@@ -179,7 +199,7 @@ export const resetPassword = async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(400).json({ message: "Invalid or expired mission token." });
+      return res.status(400).json({ message: "Invalid or expired reset token." });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -188,10 +208,10 @@ export const resetPassword = async (req, res) => {
       [hashedPassword, result.rows[0].id]
     );
 
-    res.json({ success: true, message: "Command access restored. New credentials active." });
+    res.json({ success: true, message: "Password updated successfully." });
   } catch (error) {
     console.error("Reset password error:", error);
-    res.status(500).json({ message: "Deployment failure for new credentials." });
+    res.status(500).json({ message: "Server error during password reset." });
   }
 };
 
@@ -204,12 +224,12 @@ export const updateProfile = async (req, res) => {
     const values = [];
     let i = 1;
 
-    if (name !== undefined) { fields.push(`name = $${i++}`); values.push(name); }
-    if (email !== undefined) { fields.push(`email = $${i++}`); values.push(email); }
+    if (name !== undefined)       { fields.push(`name = $${i++}`);       values.push(name); }
+    if (email !== undefined)      { fields.push(`email = $${i++}`);      values.push(email); }
     if (avatar_url !== undefined) { fields.push(`avatar_url = $${i++}`); values.push(avatar_url); }
-    if (points !== undefined) { fields.push(`points = $${i++}`); values.push(points); }
+    if (points !== undefined)     { fields.push(`points = $${i++}`);     values.push(points); }
     if (settings !== undefined) {
-      // Merge with existing so partial updates don't wipe previous keys
+      // Merge so partial updates don't wipe previous keys
       fields.push(`settings = COALESCE(settings, '{}'::jsonb) || $${i++}::jsonb`);
       values.push(JSON.stringify(settings));
     }
@@ -219,16 +239,20 @@ export const updateProfile = async (req, res) => {
     }
 
     values.push(id);
-    const query = `UPDATE users SET ${fields.join(", ")} WHERE id = $${i} RETURNING id, name, email, role, points, avatar_url, settings`;
+    const query = `
+      UPDATE users SET ${fields.join(", ")}
+      WHERE id = $${i}
+      RETURNING id, name, email, role, points, avatar_url, settings
+    `;
     const result = await pool.query(query, values);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res.json({ message: "Tactical profile synchronized", user: result.rows[0] });
+    res.json({ message: "Profile updated", user: result.rows[0] });
   } catch (error) {
     console.error("Profile update error:", error);
-    res.status(500).json({ message: "Strategic failure during profile synchronization." });
+    res.status(500).json({ message: "Server error during profile update." });
   }
 };

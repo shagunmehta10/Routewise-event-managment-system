@@ -38,21 +38,30 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export const eventAPI = {
   // Get all events
   getAllEvents: async (userId?: string | number) => {
-    if (!USE_REAL_API) {
-      await delay(300);
-      return [...MOCK_EVENTS];
+    try {
+      const url = userId 
+        ? `${API_CONFIG.baseURL}/api/events?userId=${userId}`
+        : `${API_CONFIG.baseURL}/api/events`;
+      
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Failed to fetch events");
+      let events = await response.json();
+      
+      // If we fetched ALL events (no userId), we still want to hide private ones 
+      // from other users on the client side just in case.
+      if (!userId) {
+        const userJson = localStorage.getItem('user');
+        const currentUser = userJson ? JSON.parse(userJson) : null;
+        events = events.filter((e: any) => 
+          !e.is_private || (currentUser && String(e.user_id) === String(currentUser.id))
+        );
+      }
+      
+      return events;
+    } catch (error) {
+      console.error('API Error (getAllEvents):', error);
+      return [];
     }
-    const url = userId 
-      ? `${API_CONFIG.baseURL}/api/events?userId=${userId}`
-      : `${API_CONFIG.baseURL}/api/events`;
-    
-    const response = await fetch(url);
-    if (!response.ok) throw new Error("Failed to fetch events");
-    const events = await response.json();
-    
-    // Stealth Mode Filtering: Hide missions from owners who are in 'private' mode
-    // (In a real system, the backend would handle this per-user permission)
-    return events.filter((e: any) => !e.is_private || (userId && String(e.user_id) === String(userId)));
   },
 
   // Create new event
@@ -142,82 +151,34 @@ export const eventAPI = {
   getLiveStatus: (event: any) => {
     if (!event || !event.date) return 'upcoming';
     
-    const now = new Date();
-    // Use ISO string to get YYYY-MM-DD in UTC, then compare with local current date components
-    // Or better, just get current YYYY, MM, DD in local
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    const currentDate = now.getDate();
+    // Normalize to IST (Indian Standard Time)
+    const nowUtc = new Date();
+    const nowIst = new Date(nowUtc.getTime() + (5.5 * 60 * 60 * 1000));
     
-    let eventDate;
-    const d = new Date(event.date);
-    if (!isNaN(d.getTime())) {
-      eventDate = d;
-    } else {
-      return 'upcoming';
-    }
+    // Parse event date in IST
+    const eDateObj = new Date(event.date);
+    const eventDateStr = eDateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const [y, m, d] = eventDateStr.split('-').map(Number);
 
-    const isToday = 
-      eventDate.getFullYear() === currentYear &&
-      eventDate.getMonth() === currentMonth &&
-      eventDate.getDate() === currentDate;
-      
-    // Create a normalized "today 00:00:00" for comparison
-    const todayStart = new Date(currentYear, currentMonth, currentDate).getTime();
-    const eventDayStart = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate()).getTime();
-
-    const isPast = eventDayStart < todayStart;
-    const isFuture = eventDayStart > todayStart;
-
-    if (isFuture) return 'upcoming';
+    // Parse event times (HH:MM)
+    const startTimeStr = event.startTime || event.starttime || "00:00";
+    const endTimeStr = event.endTime || event.endtime || "23:59";
+    const [sh, sm] = startTimeStr.split(':').map(Number);
+    const [eh, em] = endTimeStr.split(':').map(Number);
     
-    const startTime = event.startTime || event.starttime;
-    const endTime = event.endTime || event.endtime;
-    const currentMins = now.getHours() * 60 + now.getMinutes();
+    const startTime = new Date(y, m - 1, d, sh, sm);
+    const endTime = new Date(y, m - 1, d, eh, em);
 
-    // Check for midnight cross from yesterday
-    if (isPast) {
-      if (startTime && endTime) {
-        const [sh, sm] = startTime.split(':').map(Number);
-        const [eh, em] = endTime.split(':').map(Number);
-        const startMins = sh * 60 + sm;
-        const endMins = eh * 60 + em;
-        
-        if (endMins < startMins) { // Midnight cross happened
-           // If we are currently in the early morning (before endMins), it's still live from yesterday
-           if (currentMins <= endMins) return 'live';
-        }
-      }
-      return 'completed';
-    }
-
-    if (isToday) {
-      if (startTime) {
-        const [sh, sm] = startTime.split(':').map(Number);
-        const startMins = sh * 60 + sm;
-        
-        if (!endTime) {
-          return currentMins >= startMins ? 'live' : 'upcoming';
-        }
-
-        const [eh, em] = endTime.split(':').map(Number);
-        let endMins = eh * 60 + em;
-        
-        if (endMins < startMins) {
-          // Midnight cross: if current time is after start OR before end
-          if (currentMins >= startMins || currentMins <= endMins) return 'live';
-          return 'upcoming';
-        } else {
-          if (currentMins >= startMins && currentMins <= endMins) return 'live';
-          if (currentMins < startMins) return 'upcoming';
-          return 'completed';
-        }
-      }
-      return 'live'; // Default to live if it's today but no time is set
+    // Handle midnight cross
+    if (endTime < startTime) {
+      endTime.setDate(endTime.getDate() + 1);
     }
     
+    if (nowIst >= startTime && nowIst <= endTime) return 'live';
+    if (nowIst > endTime) return 'completed';
     return 'upcoming';
   },
+
 
   // Detect clashes between events
   detectClashes: (events: any[]) => {
@@ -248,9 +209,16 @@ export const eventAPI = {
       for (const other of all) {
         if (e.id === other.id) continue;
         
+        // Skip completed events for clash detection
+        if (e.status === 'completed' || other.status === 'completed') continue;
+
         const oD = new Date(other.date);
-        const oDate = new Date(oD.getFullYear(), oD.getMonth(), oD.getDate()).getTime();
+        if (isNaN(oD.getTime())) continue;
+        const oIst = new Date(oD.getTime() + (5.5 * 60 * 60 * 1000));
+        const oDate = new Date(oIst.getUTCFullYear(), oIst.getUTCMonth(), oIst.getUTCDate()).getTime();
         if (eDate !== oDate) continue;
+
+
 
         const oStart = toMins(other.startTime);
         let oEnd = other.endTime ? toMins(other.endTime) : oStart + 240;
@@ -315,9 +283,7 @@ export const routeAPI = {
         let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1&countrycodes=in`;
         if (bounded) url += `&viewbox=${dehradunViewbox}&bounded=1`;
         
-        const response = await fetch(url, {
-            headers: { 'User-Agent': 'RouteWise-Event-App/1.0' }
-        });
+        const response = await fetch(`${API_CONFIG.baseURL}/api/routes/geocode?q=${encodeURIComponent(q)}`);
         if (!response.ok) return null;
         const data = await response.json();
         if (data && data.length > 0) {
@@ -368,8 +334,7 @@ export const routeAPI = {
     if (!query || query.length < 3) return [];
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`,
-        { headers: { 'User-Agent': 'RouteWise-Event-App/1.0' } }
+        `${API_CONFIG.baseURL}/api/routes/search?q=${encodeURIComponent(query)}`
       );
       if (!response.ok) return [];
       const data = await response.json();
@@ -831,7 +796,7 @@ export const USE_REAL_API = true;
 
 // Real API configuration (for future use)
 export const API_CONFIG = {
-  baseURL: 'http://localhost:5000',
+  baseURL: 'https://routewise-event-managment-system-1.onrender.com',
   timeout: 10000,
 };
 

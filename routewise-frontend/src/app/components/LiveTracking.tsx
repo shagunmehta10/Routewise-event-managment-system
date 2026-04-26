@@ -68,9 +68,16 @@ function computeStatus(event: {
   const nowUtc = new Date();
   const now = new Date(nowUtc.getTime() + (5.5 * 60 * 60 * 1000)); // IST
   
-  const [y, mo, d] = event.date.split('-').map(Number);
-  const [sh, sm]   = event.startTime.split(':').map(Number);
+  const dObj = new Date(event.date);
+  const eIst = new Date(dObj.getTime() + (5.5 * 60 * 60 * 1000));
+  const y  = eIst.getUTCFullYear();
+  const mo = eIst.getUTCMonth() + 1;
+  const d  = eIst.getUTCDate();
+
+  
+  const [sh, sm]   = (event.startTime || '00:00').split(':').map(Number);
   const [eh, em]   = (event.endTime ?? '23:59').split(':').map(Number);
+
 
   const start = new Date(y, mo - 1, d, sh, sm);
   const end   = new Date(y, mo - 1, d, eh, em);

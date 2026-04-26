@@ -1,8 +1,6 @@
-// Socket.io Mock Service
-// This is a mock implementation for demonstration purposes
-// Replace with real Socket.io connection when backend is available
+import { io, Socket } from 'socket.io-client';
 
-export const USE_REAL_SOCKET = false; // Set to true when you have a real socket server
+export const USE_REAL_SOCKET = true;
 
 interface VehicleLocation {
   lat: number;
@@ -20,194 +18,105 @@ interface EmergencyAlert {
 }
 
 class SocketService {
+  private socket: Socket | null = null;
   private connected: boolean = false;
-  private listeners: Map<string, Set<Function>> = new Map();
-  private mockIntervals: Map<string, any> = new Map();
 
-  // Connect to socket server (mock implementation)
+  // Connect to socket server
   connect(): void {
-    if (this.connected) {
-      console.log('Socket already connected (mock mode)');
-      return;
-    }
+    if (this.socket?.connected) return;
 
-    if (!USE_REAL_SOCKET) {
-      // Mock connection
-      console.log('Socket connected in MOCK mode');
+    this.socket = io('http://localhost:5000', {
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+
+    this.socket.on('connect', () => {
+      console.log('[Socket] Connected to server:', this.socket?.id);
       this.connected = true;
-      return;
-    }
+    });
 
-    // Real socket.io connection would go here when USE_REAL_SOCKET is true
-    console.warn('Real socket connection not implemented yet');
+    this.socket.on('disconnect', () => {
+      console.log('[Socket] Disconnected from server');
+      this.connected = false;
+    });
+
+    this.socket.on('connect_error', (error) => {
+      console.error('[Socket] Connection error:', error);
+    });
   }
 
   // Disconnect from socket server
   disconnect(): void {
-    if (this.connected) {
-      // Clear all mock intervals
-      this.mockIntervals.forEach((interval) => clearInterval(interval));
-      this.mockIntervals.clear();
-      this.listeners.clear();
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
       this.connected = false;
-      console.log('Socket disconnected');
     }
   }
 
   // Subscribe to an event
-  on(event: string, callback: Function): void {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
-    }
-    this.listeners.get(event)?.add(callback);
+  on(event: string, callback: (...args: any[]) => void): void {
+    if (!this.socket) this.connect();
+    this.socket?.on(event, callback);
   }
 
   // Unsubscribe from an event
-  off(event: string, callback?: Function): void {
+  off(event: string, callback?: (...args: any[]) => void): void {
     if (callback) {
-      this.listeners.get(event)?.delete(callback);
+      this.socket?.off(event, callback);
     } else {
-      this.listeners.delete(event);
+      this.socket?.off(event);
     }
   }
 
-  // Emit an event (mock implementation)
+  // Emit an event
   emit(event: string, data?: any): void {
-    if (!USE_REAL_SOCKET) {
-      console.log('Mock emit:', event, data);
-      return;
-    }
-    // Real socket emit would go here
+    if (!this.socket) this.connect();
+    this.socket?.emit(event, data);
   }
 
-  // Join a room (mock implementation)
+  // Join a room
   joinRoom(roomId: string): void {
-    console.log('Joined room (mock):', roomId);
+    this.emit('joinEvent', roomId);
   }
 
-  // Leave a room (mock implementation)
+  // Leave a room
   leaveRoom(roomId: string): void {
-    console.log('Left room (mock):', roomId);
+    // Backend doesn't explicitly have leaveEvent but socket.leave(room) can be added if needed
+    // For now, we'll just emit it if the backend handles it or just disconnect/change room
   }
 
-  // Subscribe to vehicle location updates (mock implementation)
+  // Subscribe to vehicle location updates
   subscribeToVehicleTracking(vehicleId: string, callback: (data: VehicleLocation) => void): void {
-    this.joinRoom(`vehicle-${vehicleId}`);
-    this.on('vehicle-location-update', callback);
-
-    if (!USE_REAL_SOCKET) {
-      // Simulate vehicle movement updates every 2 seconds
-      const intervalId = setInterval(() => {
-        const mockLocation: VehicleLocation = {
-          lat: 40.7128 + (Math.random() - 0.5) * 0.01,
-          lng: -74.006 + (Math.random() - 0.5) * 0.01,
-          heading: Math.random() * 360,
-          speed: 30 + Math.random() * 30,
-          timestamp: new Date().toISOString(),
-        };
-
-        // Trigger callback with mock data
-        const listeners = this.listeners.get('vehicle-location-update');
-        if (listeners) {
-          listeners.forEach((listener) => listener(mockLocation));
-        }
-      }, 2000);
-
-      this.mockIntervals.set(`vehicle-${vehicleId}`, intervalId);
-    }
+    this.joinRoom(vehicleId);
+    this.on('updateLocation', callback);
   }
 
   // Unsubscribe from vehicle location updates
-  unsubscribeFromVehicleTracking(vehicleId: string, callback?: Function): void {
-    this.leaveRoom(`vehicle-${vehicleId}`);
-    if (callback) {
-      this.off('vehicle-location-update', callback);
-    }
-
-    // Clear mock interval
-    const intervalId = this.mockIntervals.get(`vehicle-${vehicleId}`);
-    if (intervalId) {
-      clearInterval(intervalId);
-      this.mockIntervals.delete(`vehicle-${vehicleId}`);
-    }
+  unsubscribeFromVehicleTracking(vehicleId: string, callback?: (...args: any[]) => void): void {
+    this.off('updateLocation', callback);
   }
 
-  // Subscribe to emergency alerts (mock implementation)
+  // Subscribe to emergency alerts
   subscribeToEmergencyAlerts(callback: (data: EmergencyAlert) => void): void {
-    this.on('emergency-alert', callback);
-
-    if (!USE_REAL_SOCKET) {
-      // Simulate occasional emergency alerts
-      const intervalId = setInterval(() => {
-        if (Math.random() > 0.7) { // 30% chance every 10 seconds
-          const mockAlert: EmergencyAlert = {
-            id: Date.now().toString(),
-            message: 'Emergency Vehicle Alert: Ambulance approaching - Please clear the route',
-            severity: 'high',
-            timestamp: new Date().toISOString(),
-          };
-
-          const listeners = this.listeners.get('emergency-alert');
-          if (listeners) {
-            listeners.forEach((listener) => listener(mockAlert));
-          }
-        }
-      }, 10000);
-
-      this.mockIntervals.set('emergency-alerts', intervalId);
-    }
+    this.on('clearRoute', callback);
   }
 
   // Unsubscribe from emergency alerts
-  unsubscribeFromEmergencyAlerts(callback?: Function): void {
-    if (callback) {
-      this.off('emergency-alert', callback);
-    }
-
-    const intervalId = this.mockIntervals.get('emergency-alerts');
-    if (intervalId) {
-      clearInterval(intervalId);
-      this.mockIntervals.delete('emergency-alerts');
-    }
+  unsubscribeFromEmergencyAlerts(callback?: (...args: any[]) => void): void {
+    this.off('clearRoute', callback);
   }
 
-  // Subscribe to route updates (mock implementation)
+  // Subscribe to route updates
   subscribeToRouteUpdates(eventId: string, callback: (data: any) => void): void {
-    this.joinRoom(`event-${eventId}`);
+    this.joinRoom(eventId);
     this.on('route-update', callback);
-
-    if (!USE_REAL_SOCKET) {
-      // Simulate route updates every 5 seconds
-      const intervalId = setInterval(() => {
-        const mockUpdate = {
-          eventId,
-          status: 'active',
-          progress: Math.random() * 100,
-          timestamp: new Date().toISOString(),
-        };
-
-        const listeners = this.listeners.get('route-update');
-        if (listeners) {
-          listeners.forEach((listener) => listener(mockUpdate));
-        }
-      }, 5000);
-
-      this.mockIntervals.set(`event-${eventId}`, intervalId);
-    }
   }
 
   // Unsubscribe from route updates
-  unsubscribeFromRouteUpdates(eventId: string, callback?: Function): void {
-    this.leaveRoom(`event-${eventId}`);
-    if (callback) {
-      this.off('route-update', callback);
-    }
-
-    const intervalId = this.mockIntervals.get(`event-${eventId}`);
-    if (intervalId) {
-      clearInterval(intervalId);
-      this.mockIntervals.delete(`event-${eventId}`);
-    }
+  unsubscribeFromRouteUpdates(eventId: string, callback?: (...args: any[]) => void): void {
+    this.off('route-update', callback);
   }
 
   // Check if socket is connected
@@ -215,9 +124,9 @@ class SocketService {
     return this.connected;
   }
 
-  // Get socket instance (mock returns null)
-  getSocket(): any {
-    return null;
+  // Get socket instance
+  getSocket(): Socket | null {
+    return this.socket;
   }
 }
 
@@ -225,12 +134,12 @@ class SocketService {
 const socketService = new SocketService();
 export default socketService;
 
-// Configuration for real Socket.io (for future use)
 export const SOCKET_CONFIG = {
-  url: 'https://api.routewise.com',
+  url: 'http://localhost:5000',
   options: {
     reconnection: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
   },
 };
+
