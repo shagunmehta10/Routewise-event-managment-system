@@ -83,7 +83,14 @@ export function CreateEvent({ onEventCreated }: CreateEventProps) {
       const existingEvents = await eventAPI.getAllEvents(user?.id);
       
       const clash = detectClash(
-        { name: formData.name, date: formData.date, startTime: formData.startTime, endTime: formData.endTime },
+        { 
+          name: formData.name, 
+          date: formData.date, 
+          startTime: formData.startTime, 
+          endTime: formData.endTime,
+          startLocation: formData.startLocation,
+          endLocation: formData.endLocation
+        },
         existingEvents
       );
 

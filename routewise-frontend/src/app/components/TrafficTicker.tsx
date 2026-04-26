@@ -10,8 +10,8 @@ export function TrafficTicker() {
     const fetchStats = async () => {
       try {
         const events = await eventAPI.getAllEvents();
-        const live = events.filter(e => eventAPI.getLiveStatus(e) === 'live').length;
-        const clashes = eventAPI.detectClashes(events).filter(e => e.clashing).length;
+        const live = events.filter((e: any) => eventAPI.getLiveStatus(e) === 'live').length;
+        const clashes = eventAPI.detectClashes(events).filter((e: any) => e.clashing).length;
         
         let risk = 'Low';
         if (clashes > 0) risk = 'Critical';
