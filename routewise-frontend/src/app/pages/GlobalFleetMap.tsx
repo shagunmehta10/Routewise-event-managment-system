@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Navbar } from '../components/Navbar';
+import TrafficTicker from '../components/TrafficTicker';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -263,6 +264,7 @@ export default function GlobalFleetMap() {
   return (
     <div className="global-fleet-map-page" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#0f172a' }}>
       <Navbar />
+      <TrafficTicker />
 
       {/* Clash Alert Banner */}
       {clashCount > 0 && (
