@@ -151,14 +151,10 @@ export const eventAPI = {
   getLiveStatus: (event: any) => {
     if (!event || !event.date) return 'upcoming';
     
-    // Normalize to IST (Indian Standard Time)
-    const nowUtc = new Date();
-    const nowIst = new Date(nowUtc.getTime() + (5.5 * 60 * 60 * 1000));
+    const now = new Date();
     
-    // Parse event date in IST
-    const eDateObj = new Date(event.date);
-    const eventDateStr = eDateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const [y, m, d] = eventDateStr.split('-').map(Number);
+    // Parse event date
+    const [y, m, d] = event.date.split('-').map(Number);
 
     // Parse event times (HH:MM)
     const startTimeStr = event.startTime || event.starttime || "00:00";
@@ -174,8 +170,8 @@ export const eventAPI = {
       endTime.setDate(endTime.getDate() + 1);
     }
     
-    if (nowIst >= startTime && nowIst <= endTime) return 'live';
-    if (nowIst > endTime) return 'completed';
+    if (now >= startTime && now <= endTime) return 'live';
+    if (now > endTime) return 'completed';
     return 'upcoming';
   },
 
@@ -226,7 +222,9 @@ export const eventAPI = {
 
         // Time overlap AND Same Route
         if (eStart < oEnd && oStart < eEnd) {
-          const sameRoute = e.startLocation === other.startLocation && e.endLocation === other.endLocation;
+          const norm = (s: string) => s ? s.toLowerCase().replace(/\s+/g, '') : '';
+          const sameRoute = norm(e.startLocation) === norm(other.startLocation) && 
+                            norm(e.endLocation) === norm(other.endLocation);
           
             if (sameRoute) {
               clashing = true;

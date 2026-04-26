@@ -38,7 +38,9 @@ export function detectClash(
     const evEnd   = toMinutes(ev.endTime);
 
     const overlaps = newStart < evEnd && newEnd > evStart;
-    const sameRoute = ev.startLocation === newEvent.startLocation && ev.endLocation === newEvent.endLocation;
+    const norm = (s: string) => s ? s.toLowerCase().replace(/\s+/g, '') : '';
+    const sameRoute = norm(ev.startLocation) === norm(newEvent.startLocation) && 
+                      norm(ev.endLocation) === norm(newEvent.endLocation);
 
     if (overlaps && sameRoute) {
       const overlapMinutes = Math.min(newEnd, evEnd) - Math.max(newStart, evStart);
