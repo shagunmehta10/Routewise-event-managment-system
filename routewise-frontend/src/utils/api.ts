@@ -153,8 +153,9 @@ export const eventAPI = {
     
     const now = new Date();
     
-    // Parse event date
-    const [y, m, d] = event.date.split('-').map(Number);
+    // Parse event date robustly (handles 'YYYY-MM-DD' and 'YYYY-MM-DDT...')
+    const dateStr = event.date.split('T')[0];
+    const [y, m, d] = dateStr.split('-').map(Number);
 
     // Parse event times (HH:MM)
     const startTimeStr = event.startTime || event.starttime || "00:00";

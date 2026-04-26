@@ -32,7 +32,9 @@ export function detectClash(
   const newEnd   = toMinutes(newEvent.endTime);
 
   for (const ev of existingEvents) {
-    if (ev.date !== newEvent.date) continue;          // different day — skip
+    const evDate = ev.date?.split('T')[0];
+    const newDate = newEvent.date?.split('T')[0];
+    if (evDate !== newDate) continue;          // different day — skip
 
     const evStart = toMinutes(ev.startTime);
     const evEnd   = toMinutes(ev.endTime);
