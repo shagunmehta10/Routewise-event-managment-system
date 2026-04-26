@@ -188,9 +188,10 @@ export default function GlobalFleetMap() {
 
       const eventsWithClashes = eventAPI.detectClashes(initialEvents);
       
-      // Apply privacy filter — hide private events from other users
+      // Apply privacy filter and hide old events from other users
       const visibleEvents: FleetEvent[] = eventsWithClashes.filter((e: any) => 
-        !e.is_private || (user && String(e.user_id) === String(user.id))
+        (!e.is_private || (user && String(e.user_id) === String(user.id))) &&
+        eventAPI.getLiveStatus(e) !== 'completed'
       );
       
       setEvents(visibleEvents);
