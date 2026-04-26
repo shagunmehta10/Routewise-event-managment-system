@@ -1,0 +1,16 @@
+-- CREATE DATABASE routewise;
+-- CREATE TABLE users (
+--     id SERIAL PRIMARY KEY,
+--     name VARCHAR(100),
+--     email VARCHAR(100) UNIQUE,
+--     password TEXT,
+--     role VARCHAR(50) -- organizer, authority, venue
+-- );
+-- CREATE TABLE venues (
+--     id SERIAL PRIMARY KEY,
+--     name VARCHAR(100),
+--     address TEXT,
+--     service_road_available BOOLEAN,
+--     internal_route TEXT,
+--     approved BOOLEAN DEFAULT FALSE
+-- );

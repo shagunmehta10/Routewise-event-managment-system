@@ -1,0 +1,207 @@
+/* Premium Elegant Color Palette */
+:root {
+  /* Rich Dark & Gold Theme */
+  --premium-dark: #0f0f1e;
+  --premium-darker: #06060f;
+  --premium-navy: #1a1a2e;
+  --premium-navy-light: #252541;
+  
+  /* Gold Accents */
+  --premium-gold: #d4af37;
+  --premium-gold-light: #f4d03f;
+  --premium-gold-dark: #b8941e;
+  
+  /* Purple Luxury */
+  --premium-purple: #7c3aed;
+  --premium-purple-light: #a78bfa;
+  --premium-purple-dark: #5b21b6;
+  
+  /* Rose Gold */
+  --premium-rose: #e91e63;
+  --premium-rose-light: #f06292;
+  --premium-rose-dark: #c2185b;
+  
+  /* Teal Accent */
+  --premium-teal: #14b8a6;
+  --premium-teal-light: #5eead4;
+  --premium-teal-dark: #0d9488;
+  
+  /* Neutral Elegance */
+  --premium-white: #ffffff;
+  --premium-off-white: #f9fafb;
+  --premium-gray-100: #f3f4f6;
+  --premium-gray-200: #e5e7eb;
+  --premium-gray-300: #d1d5db;
+  --premium-gray-400: #9ca3af;
+  --premium-gray-500: #6b7280;
+  --premium-gray-600: #4b5563;
+  --premium-gray-700: #374151;
+  --premium-gray-800: #1f2937;
+  --premium-gray-900: #111827;
+  
+  /* Gradients */
+  --gradient-purple-blue: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-gold: linear-gradient(135deg, #f4d03f 0%, #d4af37 100%);
+  --gradient-rose: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  --gradient-teal: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+  --gradient-dark: linear-gradient(135deg, #1a1a2e 0%, #0f0f1e 100%);
+  --gradient-premium: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  --gradient-luxury: linear-gradient(135deg, #d4af37 0%, #7c3aed 50%, #14b8a6 100%);
+  
+  /* Glassmorphism */
+  --glass-bg: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.2);
+  
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.16);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.24);
+  --shadow-gold: 0 8px 32px rgba(212, 175, 55, 0.3);
+  --shadow-purple: 0 8px 32px rgba(124, 58, 237, 0.3);
+  --shadow-teal: 0 8px 32px rgba(20, 184, 166, 0.3);
+}
+
+/* Premium Animations */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(212, 175, 55, 0.6);
+  }
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Utility Classes */
+.glass-effect {
+  background: var(--glass-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+}
+
+.gradient-text {
+  background: var(--gradient-premium);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-size: 200% 200%;
+  animation: gradientShift 3s ease infinite;
+}
+
+.hover-lift {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-8px);
+  box-shadow: var(--shadow-xl);
+}
+
+.premium-card {
+  background: var(--premium-white);
+  border-radius: 1.5rem;
+  box-shadow: var(--shadow-md);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  position: relative;
+}
+
+.premium-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--gradient-luxury);
+}
+
+.premium-card:hover {
+  box-shadow: var(--shadow-xl);
+  transform: translateY(-4px);
+}
+
+.shimmer-effect {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer-effect::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}

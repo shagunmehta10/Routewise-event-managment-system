@@ -1,0 +1,24 @@
+{
+  "sqltools.connections": [
+    {
+      "ssh": "Disabled",
+      "previewLimit": 50,
+      "server": "localhost",
+      "port": 5432,
+      "driver": "PostgreSQL",
+      "name": "postgresconn",
+      "database": "Routwise event managment system",
+      "username": "postgres"
+    },
+    {
+      "ssh": "Disabled",
+      "previewLimit": 50,
+      "server": "localhost",
+      "port": 5432,
+      "driver": "PostgreSQL",
+      "database": "Routewise event managment system",
+      "username": "postgres",
+      "name": "Routewise event management system"
+    }
+  ]
+}
