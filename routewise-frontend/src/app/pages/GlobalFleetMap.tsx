@@ -230,6 +230,9 @@ export default function GlobalFleetMap() {
             processed[i] = { ...processed[i], geoLoading: false, geoError: true };
           }
           setEvents([...processed]);
+          if (start && end) {
+            await delay(1000); // Prevent OSRM API 429 Rate Limit
+          }
         } catch {
           processed[i] = { ...processed[i], geoLoading: false };
           setEvents([...processed]);
