@@ -4,12 +4,14 @@ import {
   User, Mail, Shield, Award, Calendar, MapPin, 
   History, TrendingUp, Zap, Clock, ArrowRight, Star, Camera
 } from 'lucide-react';
+import { useUser } from '@clerk/clerk-react';
 import { authAPI, eventAPI } from '../../utils/api';
 import { Navbar } from '../components/Navbar';
 import { toast } from 'sonner';
 import '../styles/dashboard.css';
 
 export default function ProfilePage() {
+  const { user: clerkUser } = useUser();
   const [user, setUser] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,23 +36,28 @@ export default function ProfilePage() {
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user) return;
+    if (!file || !user || !clerkUser) return;
 
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64String = reader.result as string;
-      try {
-        setLoading(true);
-        const updatedUser = await authAPI.updateProfile(user.id, { avatar_url: base64String });
-        setUser(updatedUser);
-        toast.success('Tactical avatar updated');
-      } catch (err) {
-        toast.error('Failed to update avatar');
-      } finally {
-        setLoading(false);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      setLoading(true);
+      
+      // Update the profile image in Clerk
+      await clerkUser.setProfileImage({ file });
+      
+      // Sync the new Clerk profile image to our backend
+      await authAPI.syncUser(clerkUser);
+      
+      // Refresh local user state from backend
+      const userData = await authAPI.getProfile();
+      setUser(userData);
+      
+      toast.success('Tactical avatar updated');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to update avatar in system');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) {
@@ -100,8 +107,8 @@ export default function ProfilePage() {
                 border: '6px solid rgba(255,255,255,0.2)',
                 overflow: 'hidden'
               }}>
-                {user?.avatar_url ? (
-                  <img src={user.avatar_url} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {clerkUser?.imageUrl || user?.avatar_url ? (
+                  <img src={clerkUser?.imageUrl || user?.avatar_url} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
                   <User size={70} color="#1e40af" />
                 )}
@@ -136,10 +143,10 @@ export default function ProfilePage() {
               </label>
             </div>
             <div>
-              <h1 style={{ fontSize: '3rem', fontWeight: 800, marginBottom: '0.75rem', textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>{user?.name || 'Commander Profile'}</h1>
+              <h1 style={{ fontSize: '3rem', fontWeight: 800, marginBottom: '0.75rem', textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>{clerkUser?.fullName || clerkUser?.firstName || user?.name || 'Commander Profile'}</h1>
               <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
                 <span className="live-info-badge" style={{ background: 'rgba(255,255,255,0.15)', color: 'white', border: '1px solid rgba(255,255,255,0.2)' }}>
-                  <Mail size={16} /> {user?.email}
+                  <Mail size={16} /> {clerkUser?.primaryEmailAddress?.emailAddress || user?.email}
                 </span>
                 <span className="live-info-badge" style={{ background: 'rgba(255,255,255,0.15)', color: 'white', border: '1px solid rgba(255,255,255,0.2)' }}>
                   <Shield size={16} /> {user?.role === 'admin' ? 'Strategic Administrator' : 'Field Operator'}

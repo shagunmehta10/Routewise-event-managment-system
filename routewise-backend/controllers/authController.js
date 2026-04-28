@@ -51,12 +51,60 @@ export const ensureSettingsColumn = async () => {
   }
 };
 
+// ── Sync User (Clerk) ───────────────────────────────────────────────────────
+export const syncUser = async (req, res) => {
+  // @clerk/express middleware puts the authenticated user state in req.auth
+  const { userId: clerkId } = req.auth || {};
+  const { name, email, clerkId: reqClerkId, avatar_url } = req.body;
+  
+  if (!clerkId || clerkId !== reqClerkId) {
+    return res.status(401).json({ message: "Unauthorized syncing attempt" });
+  }
+
+  try {
+    // Check if user already exists (by email)
+    const existingResult = await pool.query(
+      "SELECT * FROM users WHERE LOWER(email) = LOWER($1)",
+      [email]
+    );
+
+    let user;
+
+    if (existingResult.rows.length > 0) {
+      // User exists, update avatar and clerk_id (if we added it to schema, but for now we rely on email)
+      const existingUser = existingResult.rows[0];
+      const updateResult = await pool.query(
+        "UPDATE users SET avatar_url = $1 WHERE id = $2 RETURNING id, name, email, role, points, avatar_url, settings",
+        [avatar_url || existingUser.avatar_url, existingUser.id]
+      );
+      user = updateResult.rows[0];
+    } else {
+      // New user
+      // Give a dummy password since Clerk handles auth
+      const dummyPassword = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10);
+      const insertResult = await pool.query(
+        "INSERT INTO users (name, email, password, role, avatar_url) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, role, points, avatar_url, settings",
+        [name, email, dummyPassword, "user", avatar_url]
+      );
+      user = insertResult.rows[0];
+    }
+
+    res.json({ message: "Sync successful", user });
+  } catch (error) {
+    console.error("Sync error:", error);
+    res.status(500).json({ message: "Server error during sync" });
+  }
+};
+
 // ── Login ───────────────────────────────────────────────────────────────────
 export const login = async (req, res) => {
-  const { email, password } = req.body;
+  let { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ message: "Email and password are required" });
   }
+  
+  email = email.trim();
+  
   try {
     const result = await pool.query(
       "SELECT * FROM users WHERE LOWER(email) = LOWER($1)", [email]
@@ -137,47 +185,57 @@ export const register = async (req, res) => {
 
 // ── Forgot Password ───────────────────────────────────────────────────────────
 export const forgotPassword = async (req, res) => {
-  const { email } = req.body;
+  const { email, newPassword } = req.body;
+  
+  if (!email || !newPassword) {
+    return res.status(400).json({ message: "Email and new password are required." });
+  }
+  
+  if (newPassword.length < 8) {
+    return res.status(400).json({ message: "Password must be at least 8 characters." });
+  }
+
   try {
     const userResult = await pool.query(
       "SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [email]
     );
 
-    // Always return 200 — don't reveal whether email exists (security best practice)
     if (userResult.rows.length === 0) {
-      return res.json({
-        success: true,
-        message: "If that email is registered, a reset link has been sent.",
-      });
+      return res.status(404).json({ message: "User not found. Please check the email." });
     }
 
-    const token = crypto.randomBytes(32).toString("hex");
-    const expiry = new Date();
-    expiry.setHours(expiry.getHours() + 1); // 1-hour expiry
-
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
     await pool.query(
-      "UPDATE users SET reset_token = $1, reset_token_expiry = $2 WHERE id = $3",
-      [token, expiry, userResult.rows[0].id]
+      "UPDATE users SET password = $1 WHERE id = $2",
+      [hashedPassword, userResult.rows[0].id]
     );
 
-    const frontendURL = process.env.FRONTEND_URL || "http://localhost:5173";
-    const resetLink = `${frontendURL}/reset-password?token=${token}`;
+    // Send confirmation email
+    if (resend && process.env.RESEND_API_KEY) {
+      try {
+        await resend.emails.send({
+          from: process.env.EMAIL_FROM || "noreply@routewise.app",
+          to: email,
+          subject: "RouteWise — Password Updated Successfully",
+          html: `
+            <div style="font-family:'Segoe UI',sans-serif;max-width:520px;margin:auto;background:#0f172a;padding:2rem;border-radius:1rem;color:white;">
+              <h1 style="color:#60a5fa;margin-bottom:0.5rem;">RouteWise</h1>
+              <p style="color:#94a3b8;">Your password has been successfully updated.</p>
+              <p style="color:#94a3b8;margin-top:1rem;">Your new password is: <strong style="color:white;background:#1e293b;padding:0.25rem 0.5rem;border-radius:0.25rem;">${newPassword}</strong></p>
+              <p style="color:#64748b;margin-top:2rem;font-size:0.85rem;">If you did not make this change, please contact your administrator immediately.</p>
+            </div>
+          `,
+        });
+        console.log(`[EMAIL] Password update confirmation sent to ${email}`);
+      } catch (emailErr) {
+        console.error("[EMAIL] Failed to send update confirmation:", emailErr.message);
+      }
+    }
 
-    const emailSent = await sendResetEmail(email, resetLink);
-
-    console.log(`[RESET] ${emailSent ? "Email sent" : "Dev fallback"}: ${resetLink}`);
-
-    res.json({
-      success: true,
-      message: emailSent
-        ? "Password reset link sent to your email."
-        : "Reset link generated (RESEND_API_KEY not set — see server logs).",
-      // Only expose link in response when email is not configured (dev mode)
-      ...(!emailSent && { link: resetLink }),
-    });
+    res.json({ success: true, message: "Password updated successfully and email sent." });
   } catch (error) {
     console.error("Forgot password error:", error);
-    res.status(500).json({ message: "Server error during reset request." });
+    res.status(500).json({ message: "Server error during password update." });
   }
 };
 

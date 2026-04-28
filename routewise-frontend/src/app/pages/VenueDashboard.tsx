@@ -30,6 +30,9 @@ export default function VenueDashboard() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [newVenue, setNewVenue] = useState({ name: '', address: '', capacity: '', contact: '', type: 'Event Zone' });
+  const [registering, setRegistering] = useState(false);
 
   const fetchVenues = async () => {
     setLoading(true);
@@ -52,6 +55,25 @@ export default function VenueDashboard() {
     v.address.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handleRegisterVenue = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegistering(true);
+    try {
+      await venueAPI.registerVenue({
+        ...newVenue,
+        capacity: newVenue.capacity ? parseInt(newVenue.capacity) : undefined
+      });
+      toast.success('New tactical zone registered successfully');
+      setShowModal(false);
+      setNewVenue({ name: '', address: '', capacity: '', contact: '', type: 'Event Zone' });
+      fetchVenues();
+    } catch (error) {
+      toast.error('Failed to register venue. Please try again.');
+    } finally {
+      setRegistering(false);
+    }
+  };
+
   return (
     <div style={{ minHeight: '100vh', position: 'relative', overflow: 'hidden' }}>
       <div className="live-bg-container" style={{ backgroundImage: 'linear-gradient(rgba(15, 23, 42, 0.8), rgba(15, 23, 42, 0.9)), url("/dashboard_bg.png")' }}></div>
@@ -64,6 +86,7 @@ export default function VenueDashboard() {
             <p style={{ color: '#94a3b8', marginTop: '0.5rem' }}>Operational monitoring and clearance status of mission-approved zones.</p>
           </div>
           <button 
+            onClick={() => setShowModal(true)}
             style={{ 
               background: '#3b82f6', 
               color: 'white', 
@@ -81,6 +104,55 @@ export default function VenueDashboard() {
             <Plus size={20} /> Register New Venue
           </button>
         </div>
+
+        {showModal && (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '1rem'
+          }}>
+            <div className="cool-glass-card" style={{
+              borderRadius: '1.5rem', padding: '2.5rem', maxWidth: '500px', width: '100%',
+              border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <h3 style={{ fontSize: '1.5rem', fontWeight: 900, color: 'white', margin: 0 }}>Register New Zone</h3>
+                <button onClick={() => setShowModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                  <XCircle size={24} />
+                </button>
+              </div>
+              <form onSubmit={handleRegisterVenue} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <div>
+                  <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem' }}>VENUE NAME *</label>
+                  <input required type="text" className="form-input" style={{ width: '100%', boxSizing: 'border-box' }} value={newVenue.name} onChange={e => setNewVenue({...newVenue, name: e.target.value})} placeholder="e.g. Royal Palace Ground" />
+                </div>
+                <div>
+                  <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem' }}>ADDRESS / LOCATION *</label>
+                  <input required type="text" className="form-input" style={{ width: '100%', boxSizing: 'border-box' }} value={newVenue.address} onChange={e => setNewVenue({...newVenue, address: e.target.value})} placeholder="e.g. 123 Main St" />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem' }}>CAPACITY</label>
+                    <input type="number" className="form-input" style={{ width: '100%', boxSizing: 'border-box' }} value={newVenue.capacity} onChange={e => setNewVenue({...newVenue, capacity: e.target.value})} placeholder="e.g. 500" />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem' }}>CONTACT (Optional)</label>
+                    <input type="text" className="form-input" style={{ width: '100%', boxSizing: 'border-box' }} value={newVenue.contact} onChange={e => setNewVenue({...newVenue, contact: e.target.value})} placeholder="Phone / Email" />
+                  </div>
+                </div>
+                <button type="submit" disabled={registering} style={{
+                  background: '#3b82f6', color: 'white', border: 'none', padding: '1rem',
+                  borderRadius: '0.75rem', fontWeight: 800, fontSize: '1rem', marginTop: '1rem',
+                  cursor: registering ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
+                  boxShadow: '0 10px 15px -3px rgba(59, 130, 246, 0.4)'
+                }}>
+                  {registering ? 'Initializing...' : 'Confirm Registration'}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
 
         <div className="search-container" style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '1rem', borderRadius: '1.25rem', display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2.5rem', border: '1px solid rgba(255,255,255,0.1)' }}>
           <Search size={20} color="#60a5fa" />

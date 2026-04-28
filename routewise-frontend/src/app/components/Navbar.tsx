@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { MapPin, LogOut, LogIn, Calendar, PlusSquare, User, Navigation2, Settings, Info, Share2, Map } from 'lucide-react';
 import { toast } from 'sonner';
+import { useUser, UserButton } from '@clerk/clerk-react';
 import '../styles/navbar.css';
 
 import { TrafficTicker } from './TrafficTicker';
@@ -9,20 +10,7 @@ import { TrafficTicker } from './TrafficTicker';
 export function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    // Check for auth state
-    const auth = localStorage.getItem('isAuthenticated') === 'true';
-    setIsLoggedIn(auth);
-  }, [location.pathname]);
-
-  const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated');
-    localStorage.removeItem('user');
-    setIsLoggedIn(false);
-    navigate('/login');
-  };
+  const { isSignedIn, user } = useUser();
 
   const handleShare = () => {
     const shareData = {
@@ -63,7 +51,7 @@ export function Navbar() {
             <PlusSquare size={18} />
             <span>Create Event</span>
           </Link>
-          {isLoggedIn && (
+          {isSignedIn && (
             <>
               <Link to="/settings" className={`nav-link ${location.pathname === '/settings' ? 'active' : ''}`}>
                 <Settings size={18} />
@@ -85,15 +73,12 @@ export function Navbar() {
           </Link>
         </div>
 
-        {isLoggedIn ? (
+        {isSignedIn ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <button onClick={handleShare} className="share-icon-btn" title="Share RouteWise">
               <Share2 size={18} />
             </button>
-            <button onClick={handleLogout} className="logout-btn">
-              <LogOut size={18} />
-              <span>Logout</span>
-            </button>
+            <UserButton afterSignOutUrl="/" />
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>

@@ -29,6 +29,7 @@ async function setupDB() {
         event_type VARCHAR(50) DEFAULT 'other',
         venue_id INTEGER,
         user_id INTEGER,
+        penalty_paid BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -51,6 +52,7 @@ async function setupDB() {
       { name: 'event_type', type: 'VARCHAR(50) DEFAULT \'other\'' },
       { name: 'venue_id', type: 'INTEGER' },
       { name: 'user_id', type: 'INTEGER' },
+      { name: 'penalty_paid', type: 'BOOLEAN DEFAULT FALSE' },
       { name: 'created_at', type: 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' }
     ];
 

@@ -399,8 +399,10 @@ export function LiveTracking({
           zoomControl={false}
         >
           <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-            attribution="© OpenStreetMap contributors"
+            url="https://{s}.google.com/vt/lyrs=m,traffic&x={x}&y={y}&z={z}"
+            attribution="© Google Maps Traffic"
+            subdomains={['mt0', 'mt1', 'mt2', 'mt3']}
+            maxZoom={20}
           />
           <ZoomControl position="bottomright" />
 

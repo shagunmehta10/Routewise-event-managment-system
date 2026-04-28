@@ -11,7 +11,6 @@ import {
   Search, 
   Calendar, 
   Clock, 
-  ChevronRight,
   MapPin,
   RotateCw,
   Layers,
@@ -32,38 +31,26 @@ L.Icon.Default.mergeOptions({
 const StartIcon = L.icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
+  iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
 });
-
 const EndIcon = L.icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
+  iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
 });
-
 const ClashIcon = L.icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-yellow.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [35, 55],
-  iconAnchor: [17, 55],
-  popupAnchor: [1, -46],
+  iconSize: [35, 55], iconAnchor: [17, 55], popupAnchor: [1, -46],
 });
-
 const UserIcon = L.icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-violet.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
+  iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
 });
 
-const EVENT_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#4f46e5'];
+const EVENT_COLORS = ['#1e3a8a', '#4c1d95', '#064e3b', '#78350f', '#831843', '#164e63', '#312e81'];
 
-// Available tile layers
 const TILE_LAYERS = {
   osm: {
     label: 'Street Map',
@@ -118,6 +105,7 @@ interface FleetEvent {
   alternatives?: any[];
   activeRouteIdx: number;
   color: string;
+  // FIX: clashing = true ONLY for the 2nd/later event (the one that must divert)
   clashing?: boolean;
   clashWith?: string;
   mustDivert?: boolean;
@@ -157,18 +145,18 @@ export default function GlobalFleetMap() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [showAllAlternatives, setShowAllAlternatives] = useState(false);
+  // FIX: clashCount counts only 2nd events (mustDivert = true), not the 1st event
   const [clashCount, setClashCount] = useState(0);
   const [tileLayer, setTileLayer] = useState<keyof typeof TILE_LAYERS>('traffic');
   const [showLayerPicker, setShowLayerPicker] = useState(false);
 
-  // Auto-set theme based on privacy settings
   useEffect(() => {
     const userJson = localStorage.getItem('user');
     const user = userJson ? JSON.parse(userJson) : null;
     if (user?.settings?.privacy === 'private') {
       setTileLayer('dark');
     } else {
-      setTileLayer('traffic'); // Default to traffic for public mode
+      setTileLayer('traffic');
     }
   }, []);
 
@@ -177,7 +165,7 @@ export default function GlobalFleetMap() {
     try {
       const userJson = localStorage.getItem('user');
       const user = userJson ? JSON.parse(userJson) : null;
-      const rawEvents = await eventAPI.getAllEvents(); // Fetch ALL global events, not just user's own
+      const rawEvents = await eventAPI.getAllEvents();
 
       const initialEvents: FleetEvent[] = rawEvents.map((e: any, i: number) => ({
         ...e,
@@ -188,17 +176,19 @@ export default function GlobalFleetMap() {
       }));
 
       const eventsWithClashes = eventAPI.detectClashes(initialEvents);
-      
-      // Apply privacy filter and hide old events from other users
-      const visibleEvents: FleetEvent[] = eventsWithClashes.filter((e: any) => 
+
+      const visibleEvents: FleetEvent[] = eventsWithClashes.filter((e: any) =>
         (!e.is_private || (user && String(e.user_id) === String(user.id))) &&
         eventAPI.getLiveStatus(e) !== 'completed'
       );
-      
-      setEvents(visibleEvents);
-      setClashCount(visibleEvents.filter((e: FleetEvent) => e.clashing).length);
 
-      // Geocode + route fetch for events missing coords
+      setEvents(visibleEvents);
+      // FIX: Only count events where mustDivert = true (i.e. the 2nd event in a clash pair)
+      setClashCount(visibleEvents.filter((e: FleetEvent) => e.mustDivert === true).length);
+
+      // FIX: Stop loading here so the sidebar immediately displays the events instead of getting stuck on skeletons!
+      setLoading(false);
+
       const processed = [...visibleEvents];
       for (let i = 0; i < processed.length; i++) {
         const ev = processed[i];
@@ -233,7 +223,7 @@ export default function GlobalFleetMap() {
           }
           setEvents([...processed]);
           if (start && end) {
-            await delay(1000); // Prevent OSRM API 429 Rate Limit
+            await delay(1000);
           }
         } catch {
           processed[i] = { ...processed[i], geoLoading: false };
@@ -242,8 +232,7 @@ export default function GlobalFleetMap() {
       }
     } catch (err) {
       console.error('Fleet fetch error:', err);
-    } finally {
-      setLoading(false);
+      setLoading(false); // Make sure to stop loading on error too
     }
   };
 
@@ -264,9 +253,8 @@ export default function GlobalFleetMap() {
   return (
     <div className="global-fleet-map-page" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#0f172a' }}>
       <Navbar />
-      <TrafficTicker />
 
-      {/* Clash Alert Banner */}
+      {/* FIX: Clash Alert Banner — only appears when mustDivert events exist (2nd events only) */}
       {clashCount > 0 && (
         <div style={{
           background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
@@ -280,7 +268,7 @@ export default function GlobalFleetMap() {
               ⚡ {clashCount} Route Clash{clashCount > 1 ? 'es' : ''} Detected
             </strong>
             <span style={{ opacity: 0.85, fontSize: '0.85rem' }}>
-              — Click a conflicted event to switch to a safe alternate path.
+              — The later-scheduled event must divert. Click the flagged event to switch to a safe alternate path.
             </span>
           </div>
           <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>
@@ -296,14 +284,13 @@ export default function GlobalFleetMap() {
           background: '#0f172a', borderRight: '1px solid rgba(255,255,255,0.07)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden'
         }}>
-          {/* Header */}
           <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h2 style={{ margin: 0, color: 'white', fontSize: '1.1rem', fontWeight: 900 }}>
                 Fleet Command
               </h2>
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <span style={{ 
+                <span style={{
                   background: 'rgba(16,185,129,0.15)', color: '#10b981',
                   fontSize: '0.7rem', fontWeight: 900, padding: '3px 8px', borderRadius: '6px'
                 }}>
@@ -318,7 +305,6 @@ export default function GlobalFleetMap() {
                 </button>
               </div>
             </div>
-            {/* Search */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.75rem', padding: '0.6rem 1rem', border: '1px solid rgba(255,255,255,0.08)' }}>
               <Search size={16} color="#64748b" />
               <input
@@ -331,11 +317,10 @@ export default function GlobalFleetMap() {
             </div>
           </div>
 
-          {/* Event List */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem' }}>
             {loading ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.5rem' }}>
-                {[1,2,3].map(i => (
+                {[1, 2, 3].map(i => (
                   <div key={i} style={{ height: '90px', background: 'rgba(255,255,255,0.05)', borderRadius: '0.75rem', animation: 'pulse 2s infinite' }} />
                 ))}
               </div>
@@ -353,14 +338,15 @@ export default function GlobalFleetMap() {
                     padding: '1rem',
                     borderRadius: '0.875rem',
                     border: '1px solid',
-                    borderColor: selectedEventId === event.id 
-                      ? event.color 
-                      : event.clashing 
-                        ? 'rgba(239,68,68,0.3)' 
+                    // FIX: Only highlight red border for 2nd event (mustDivert), not the 1st event
+                    borderColor: selectedEventId === event.id
+                      ? event.color
+                      : event.mustDivert
+                        ? 'rgba(239,68,68,0.3)'
                         : 'rgba(255,255,255,0.06)',
-                    background: selectedEventId === event.id 
+                    background: selectedEventId === event.id
                       ? `${event.color}18`
-                      : event.clashing 
+                      : event.mustDivert
                         ? 'rgba(239,68,68,0.05)'
                         : 'rgba(255,255,255,0.03)',
                     cursor: 'pointer',
@@ -368,7 +354,6 @@ export default function GlobalFleetMap() {
                     transition: 'all 0.2s'
                   }}
                 >
-                  {/* Event color bar */}
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.6rem' }}>
                     <div style={{ width: '4px', height: '100%', minHeight: '40px', borderRadius: '2px', background: event.color, flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -376,7 +361,8 @@ export default function GlobalFleetMap() {
                         <h4 style={{ margin: 0, color: 'white', fontSize: '0.9rem', fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {event.name}
                         </h4>
-                        {event.clashing && (
+                        {/* FIX: Warning icon ONLY on 2nd event (mustDivert), not the 1st */}
+                        {event.mustDivert && (
                           <AlertTriangle size={14} color="#ef4444" style={{ flexShrink: 0 }} />
                         )}
                       </div>
@@ -396,19 +382,18 @@ export default function GlobalFleetMap() {
                     </div>
                   </div>
 
-                  {/* Route segment label */}
                   <div style={{ fontSize: '0.72rem', color: '#475569', paddingLeft: '1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     📍 {event.startLocation} → {event.endLocation}
                   </div>
 
-                  {/* Alt path selector */}
+                  {/* FIX: Route selector and "Use Safe Path" only shown for 2nd event (mustDivert) */}
                   {event.alternatives && event.alternatives.length > 1 && selectedEventId === event.id && (
                     <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                         <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           Route Paths
                         </span>
-                        {event.clashing && (
+                        {event.mustDivert && (
                           <button
                             onClick={e => {
                               e.stopPropagation();
@@ -461,12 +446,10 @@ export default function GlobalFleetMap() {
 
         {/* ── Map ── */}
         <div style={{ flex: 1, position: 'relative' }}>
-          {/* Map Controls */}
           <div style={{
             position: 'absolute', top: '1rem', right: '1rem', zIndex: 1000,
             display: 'flex', flexDirection: 'column', gap: '0.5rem'
           }}>
-            {/* Layer Picker */}
             <div style={{ position: 'relative' }}>
               <button
                 onClick={() => setShowLayerPicker(!showLayerPicker)}
@@ -485,7 +468,7 @@ export default function GlobalFleetMap() {
                   position: 'absolute', right: '48px', top: 0,
                   background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.12)',
                   borderRadius: '10px', padding: '0.5rem', backdropFilter: 'blur(12px)',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.5)', minWidth: '140px'
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.5)', minWidth: '160px'
                 }}>
                   {(Object.keys(TILE_LAYERS) as (keyof typeof TILE_LAYERS)[]).map(key => (
                     <button
@@ -535,7 +518,6 @@ export default function GlobalFleetMap() {
             </button>
           </div>
 
-          {/* Map Legend */}
           <div style={{
             position: 'absolute', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)',
             zIndex: 1000, background: 'rgba(15,23,42,0.85)', backdropFilter: 'blur(12px)',
@@ -578,7 +560,6 @@ export default function GlobalFleetMap() {
             />
             <ZoomControl position="bottomright" />
 
-            {/* User location */}
             {latitude && longitude && (
               <Marker position={[latitude, longitude]} icon={UserIcon}>
                 <Popup>
@@ -589,20 +570,19 @@ export default function GlobalFleetMap() {
               </Marker>
             )}
 
-            {/* Render events */}
             {filteredEvents.map(event => {
               const isSelected = event.id === selectedEventId;
               const activeAlt = event.alternatives?.[event.activeRouteIdx];
 
               return (
                 <div key={event.id}>
-                  {/* Start marker */}
                   {event.startCoords && (
-                    <Marker position={event.startCoords} icon={event.clashing ? ClashIcon : StartIcon}>
+                    // FIX: ClashIcon only on mustDivert events (2nd event), not 1st
+                    <Marker position={event.startCoords} icon={event.mustDivert ? ClashIcon : StartIcon}>
                       <Popup>
                         <div style={{ padding: '8px', minWidth: '180px' }}>
-                          <strong style={{ color: event.clashing ? '#dc2626' : '#1e3a8a', display: 'block', marginBottom: '4px' }}>
-                            {event.clashing ? '⚠️ Route Conflict' : `🚦 ${event.name}`}
+                          <strong style={{ color: event.mustDivert ? '#dc2626' : '#1e3a8a', display: 'block', marginBottom: '4px' }}>
+                            {event.mustDivert ? '⚠️ Route Conflict' : `🚦 ${event.name}`}
                           </strong>
                           <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: '6px' }}>
                             {event.startLocation}
@@ -612,12 +592,12 @@ export default function GlobalFleetMap() {
                               📍 Distance: {activeAlt.distance}
                             </div>
                           )}
-                          {event.clashing && event.clashWith && (
+                          {event.mustDivert && event.clashWith && (
                             <div style={{ fontSize: '0.75rem', color: '#ef4444', background: '#fef2f2', padding: '4px 8px', borderRadius: '4px', marginBottom: '8px' }}>
                               Conflicts with: <strong>{event.clashWith}</strong>
                             </div>
                           )}
-                          {event.clashing && event.alternatives && event.alternatives.length > 1 && (
+                          {event.mustDivert && event.alternatives && event.alternatives.length > 1 && (
                             <button
                               onClick={() => setEvents(prev => prev.map(ev =>
                                 ev.id === event.id ? { ...ev, activeRouteIdx: 1 } : ev
@@ -632,7 +612,6 @@ export default function GlobalFleetMap() {
                     </Marker>
                   )}
 
-                  {/* End marker */}
                   {event.endCoords && (
                     <Marker position={event.endCoords} icon={EndIcon}>
                       <Popup>
@@ -644,17 +623,16 @@ export default function GlobalFleetMap() {
                     </Marker>
                   )}
 
-                  {/* Active route */}
                   {activeAlt?.geometry && (isSelected || !selectedEventId) && (
                     <Polyline
                       positions={activeAlt.geometry}
-                      color={event.clashing ? '#ef4444' : event.color}
+                      // FIX: Red line only for the event that must divert (2nd event)
+                      color={event.mustDivert ? '#ef4444' : event.color}
                       weight={isSelected ? 6 : 4}
                       opacity={isSelected ? 1 : 0.7}
                     />
                   )}
 
-                  {/* Alternate paths */}
                   {(isSelected || showAllAlternatives) && event.alternatives && event.alternatives.map((alt: any, idx: number) => {
                     if (idx === event.activeRouteIdx) return null;
                     return (

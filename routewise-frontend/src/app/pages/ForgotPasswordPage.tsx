@@ -1,23 +1,28 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
-import { MapPin, Mail, ArrowLeft, Loader2, CheckCircle } from 'lucide-react';
+import { Link, useNavigate } from 'react-router';
+import { MapPin, Mail, Lock, ArrowLeft, Loader2, CheckCircle } from 'lucide-react';
 import { authAPI } from '../../utils/api';
 import { toast } from 'sonner';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [resetLink, setResetLink] = useState('');
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters.');
+      return;
+    }
     setLoading(true);
     try {
-      const res = await authAPI.forgotPassword(email);
-      if (res.link) setResetLink(res.link);
+      await authAPI.forgotPassword(email, newPassword);
       setSubmitted(true);
-      toast.success('Tactical reset link dispatched');
+      toast.success('Password updated successfully');
+      setTimeout(() => navigate('/login'), 2000);
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -36,7 +41,7 @@ export default function ForgotPasswordPage() {
           </div>
           <h2 style={{ fontSize: '2rem', fontWeight: 900, color: 'white', margin: 0 }}>Reset <span style={{ color: '#60a5fa' }}>Credentials</span></h2>
           <p style={{ color: '#94a3b8', marginTop: '0.75rem', lineHeight: 1.5 }}>
-            Enter your operational email to receive a secure mission reset link.
+            Update your operational password directly.
           </p>
         </div>
 
@@ -55,26 +60,34 @@ export default function ForgotPasswordPage() {
                 required
               />
             </div>
+            
+            <div className="form-group" style={{ marginTop: '1.5rem' }}>
+              <label className="form-label" style={{ color: '#93c5fd' }}>
+                <Lock size={16} /> New Password
+              </label>
+              <input 
+                type="password" 
+                className="form-input" 
+                placeholder="••••••••"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                required
+                minLength={8}
+              />
+            </div>
 
             <button type="submit" className="submit-button" disabled={loading} style={{ marginTop: '2rem', height: '3.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
-              {loading ? <Loader2 className="animate-spin" /> : 'Dispatch Reset Link'}
+              {loading ? <Loader2 className="animate-spin" /> : 'Update Password'}
             </button>
           </form>
         ) : (
           <div style={{ textAlign: 'center', padding: '1rem 0' }}>
             <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '1.5rem', borderRadius: '1.5rem', border: '1px solid rgba(16, 185, 129, 0.2)', marginBottom: '2rem' }}>
               <CheckCircle size={40} color="#10b981" style={{ marginBottom: '1rem' }} />
-              <h3 style={{ color: 'white', margin: 0 }}>Link Dispatched</h3>
+              <h3 style={{ color: 'white', margin: 0 }}>Password Updated</h3>
               <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginTop: '0.5rem' }}>
-                Check your inbox or use the tactical link below:
+                Redirecting to login...
               </p>
-              {resetLink && (
-                <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '0.75rem', border: '1px dashed #10b981', overflowWrap: 'break-word' }}>
-                  <a href={resetLink} style={{ color: '#10b981', fontSize: '0.8rem', fontWeight: 700, textDecoration: 'none' }}>
-                    {resetLink}
-                  </a>
-                </div>
-              )}
             </div>
           </div>
         )}

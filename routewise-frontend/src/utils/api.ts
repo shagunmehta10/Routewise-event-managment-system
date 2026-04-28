@@ -34,6 +34,22 @@ const MOCK_EVENTS = [
 // Simulate API delay
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Helper to get auth headers from Clerk
+export const getAuthHeaders = async () => {
+  try {
+    // We try to get the clerk session from window
+    const clerk = (window as any).Clerk;
+    if (clerk && clerk.session) {
+      const token = await clerk.session.getToken();
+      return { Authorization: `Bearer ${token}` };
+    }
+    return {};
+  } catch (e) {
+    console.error("Failed to get Clerk token", e);
+    return {};
+  }
+};
+
 // API Functions
 export const eventAPI = {
   // Get all events
@@ -43,7 +59,8 @@ export const eventAPI = {
         ? `${API_CONFIG.baseURL}/api/events?userId=${userId}`
         : `${API_CONFIG.baseURL}/api/events`;
       
-      const response = await fetch(url);
+      const headers = await getAuthHeaders();
+      const response = await fetch(url, { headers });
       if (!response.ok) throw new Error("Failed to fetch events");
       let events = await response.json();
       
@@ -72,9 +89,10 @@ export const eventAPI = {
       MOCK_EVENTS.push(newEvent);
       return { success: true, message: 'Event created successfully', data: newEvent };
     }
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_CONFIG.baseURL}/api/events`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(eventData),
     });
     if (!response.ok) {
@@ -114,9 +132,10 @@ export const eventAPI = {
       }
       return null;
     }
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_CONFIG.baseURL}/api/events/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(eventData),
     });
     if (!response.ok) {
@@ -140,8 +159,10 @@ export const eventAPI = {
       }
       return null;
     }
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_CONFIG.baseURL}/api/events/${id}`, {
       method: 'DELETE',
+      headers,
     });
     if (!response.ok) throw new Error("Failed to delete event");
     return await response.json();
@@ -179,7 +200,7 @@ export const eventAPI = {
 
   // Detect clashes between events
   detectClashes: (events: any[]) => {
-    if (!events || events.length < 2) return events.map(e => ({ ...e, clashing: false }));
+    if (!events || events.length < 2) return events.map(e => ({ ...e, clashing: false, mustDivert: false }));
 
     const toMins = (t: string) => {
       if (!t) return 0;
@@ -187,65 +208,81 @@ export const eventAPI = {
       return h * 60 + m;
     };
 
-    const getPriority = (type?: string) => {
-      const p: Record<string, number> = { ambulance: 1, vip: 2, rally: 3, funeral: 4, other: 5, baraat: 6 };
-      return p[type || 'other'] || 5;
-    };
+    // FIX: Build a set of event IDs that are the "2nd" (later) in a clash pair.
+    // Only these get clashing=true and mustDivert=true.
+    // The "1st" (earlier/priority) event stays untouched (clashing=false).
+    const mustDivertIds = new Set<number | string>();
+    const clashWithMap: Record<string | number, string> = {};
 
-    return events.map((e, _, all) => {
-      let clashing = false;
-      let clashWith = '';
-      let mustDivert = false;
+    for (let i = 0; i < events.length; i++) {
+      for (let j = i + 1; j < events.length; j++) {
+        const e = events[i];
+        const o = events[j];
 
-      const eD = new Date(e.date);
-      const eDate = new Date(eD.getFullYear(), eD.getMonth(), eD.getDate()).getTime();
-      const eStart = toMins(e.startTime);
-      let eEnd = e.endTime ? toMins(e.endTime) : eStart + 240;
-      if (eEnd < eStart) eEnd += 1440;
+        // Skip completed events
+        if (e.status === 'completed' || o.status === 'completed') continue;
 
-      for (const other of all) {
-        if (e.id === other.id) continue;
-        
-        // Skip completed events for clash detection
-        if (e.status === 'completed' || other.status === 'completed') continue;
+        // Must be same date
+        const eD = new Date(e.date);
+        const oD = new Date(o.date);
+        if (isNaN(eD.getTime()) || isNaN(oD.getTime())) continue;
 
-        const oD = new Date(other.date);
-        if (isNaN(oD.getTime())) continue;
-        const oIst = new Date(oD.getTime() + (5.5 * 60 * 60 * 1000));
-        const oDate = new Date(oIst.getUTCFullYear(), oIst.getUTCMonth(), oIst.getUTCDate()).getTime();
+        const eDate = new Date(eD.getFullYear(), eD.getMonth(), eD.getDate()).getTime();
+        const oDate = new Date(oD.getFullYear(), oD.getMonth(), oD.getDate()).getTime();
         if (eDate !== oDate) continue;
 
+        const eStart = toMins(e.startTime);
+        let eEnd = e.endTime ? toMins(e.endTime) : eStart + 240;
+        if (eEnd < eStart) eEnd += 1440;
 
-
-        const oStart = toMins(other.startTime);
-        let oEnd = other.endTime ? toMins(other.endTime) : oStart + 240;
+        const oStart = toMins(o.startTime);
+        let oEnd = o.endTime ? toMins(o.endTime) : oStart + 240;
         if (oEnd < oStart) oEnd += 1440;
 
-        // Time overlap AND Same Route
-        if (eStart < oEnd && oStart < eEnd) {
-          const norm = (s: string) => s ? s.toLowerCase().replace(/\s+/g, '') : '';
-          const sameRoute = norm(e.startLocation) === norm(other.startLocation) && 
-                            norm(e.endLocation) === norm(other.endLocation);
-          
-            if (sameRoute) {
-              clashing = true;
-              clashWith = other.name;
-              mustDivert = true; // Always require clearance for clashing tactical paths
-              
-              // Trigger Tactical Alert
-              const userJson = localStorage.getItem('user');
-              const user = userJson ? JSON.parse(userJson) : null;
-              notifyClash(e, other, user);
+        // Check time overlap
+        if (!(eStart < oEnd && oStart < eEnd)) continue;
 
-            }
+        // Check same route (both directions)
+        const norm = (s: string) => s ? s.toLowerCase().replace(/\s+/g, '') : '';
+        const sameRoute =
+          (norm(e.startLocation) === norm(o.startLocation) && norm(e.endLocation) === norm(o.endLocation)) ||
+          (norm(e.startLocation) === norm(o.endLocation) && norm(e.endLocation) === norm(o.startLocation));
+
+        if (!sameRoute) continue;
+
+        // FIX: Determine which event is 2nd (later start time = must divert).
+        // If same start time, higher ID = 2nd.
+        let firstEvent = e;
+        let secondEvent = o;
+
+        if (oStart < eStart || (oStart === eStart && Number(o.id) < Number(e.id))) {
+          firstEvent = o;
+          secondEvent = e;
         }
-      }
 
+        // Only the SECOND event gets flagged — the first event is unaffected
+        mustDivertIds.add(secondEvent.id);
+        clashWithMap[secondEvent.id] = firstEvent.name;
+
+        // Notify tactical alert only for the 2nd event
+        try {
+          const userJson = localStorage.getItem('user');
+          const user = userJson ? JSON.parse(userJson) : null;
+          if (typeof notifyClash === 'function') {
+            notifyClash(secondEvent, firstEvent, user);
+          }
+        } catch (_) {}
+      }
+    }
+
+    // FIX: Map over events — only 2nd events get clashing=true + mustDivert=true
+    return events.map(e => {
+      const isSecond = mustDivertIds.has(e.id);
       return {
         ...e,
-        clashing,
-        clashWith,
-        mustDivert
+        clashing: isSecond,          // true ONLY for 2nd event
+        mustDivert: isSecond,        // true ONLY for 2nd event
+        clashWith: isSecond ? clashWithMap[e.id] : '',  // name of 1st event
       };
     });
   },
@@ -474,6 +511,36 @@ export const trackingAPI = {
 
 // Auth API
 export const authAPI = {
+  // Sync Clerk user with backend DB
+  syncUser: async (clerkUser: any) => {
+    try {
+      const headers = await getAuthHeaders();
+      const userData = {
+        name: clerkUser.fullName || clerkUser.firstName || 'User',
+        email: clerkUser.primaryEmailAddress?.emailAddress,
+        clerkId: clerkUser.id,
+        avatar_url: clerkUser.imageUrl
+      };
+      
+      const response = await fetch(`${API_CONFIG.baseURL}/api/auth/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(userData),
+      });
+      
+      if (!response.ok) throw new Error("Failed to sync user");
+      const data = await response.json();
+      
+      // Store standard details in localStorage for backward compatibility with existing pages
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('user', JSON.stringify(data.user));
+      return data;
+    } catch (e) {
+      console.error("User sync error:", e);
+      return null;
+    }
+  },
+
   login: async (credentials: { email: string; password: string }) => {
     if (!USE_REAL_API) {
       await delay(500);
@@ -591,9 +658,10 @@ export const authAPI = {
       }
       return data;
     }
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_CONFIG.baseURL}/api/auth/profile/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(data),
     });
     if (!response.ok) throw new Error("Profile synchronization failed");
@@ -642,20 +710,21 @@ export const authAPI = {
     throw new Error("Invalid or expired gift card code");
   },
 
-  // Forgot password — generate tactical reset link
-  forgotPassword: async (email: string) => {
+  // Forgot password — simple password change update
+  forgotPassword: async (email: string, newPassword?: string) => {
     if (!USE_REAL_API) {
       await delay(1000);
-      const link = `${window.location.origin}/reset-password?token=RTW-ALPHA-${Math.random().toString(36).substring(7).toUpperCase()}`;
-      console.log(`[TACTICAL DISPATCH] Link sent to ${email}: ${link}`);
-      return { success: true, message: `Tactical reset link dispatched to ${email}.`, link };
+      return { success: true, message: `Password updated.` };
     }
     const response = await fetch(`${API_CONFIG.baseURL}/api/auth/forgot-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, newPassword }),
     });
-    if (!response.ok) throw new Error("Could not verify email identity");
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Could not verify email identity");
+    }
     return await response.json();
   },
 
@@ -677,26 +746,80 @@ export const authAPI = {
 
 // Payment API
 export const paymentAPI = {
-  payPenalty: async (eventId: string, amount: number, method: string) => {
-    // Generate UPI GPay intent
-    const upiLink = `upi://pay?pa=routewise@axis&pn=RouteWise%20Tactical&am=${amount}&cu=INR&tn=Mission%20Penalty%20Event%20${eventId}`;
-    
+  payPenalty: async (eventId: string, amount: number) => {
     if (!USE_REAL_API) {
       await delay(1500);
-      // Simulate redirection to GPay in a real mobile browser
-      if (method === 'upi') {
-        console.log(`[GPAY INTENT] Redirecting to: ${upiLink}`);
-        window.open(upiLink, '_blank');
-      }
-      return { success: true, transactionId: 'TXN' + Date.now(), upiIntent: upiLink };
+      return { success: true, transactionId: 'TXN' + Date.now() };
     }
-    const response = await fetch(`${API_CONFIG.baseURL}/api/events/${eventId}/pay-penalty`, {
+
+    const headers = await getAuthHeaders();
+    
+    // 1. Fetch order from backend
+    const orderResponse = await fetch(`${API_CONFIG.baseURL}/api/events/${eventId}/pay-penalty`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount, method, upiIntent: upiLink }),
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify({ amount }),
     });
-    if (!response.ok) throw new Error("Payment failed");
-    return await response.json();
+    
+    if (!orderResponse.ok) throw new Error("Failed to create payment order");
+    const order = await orderResponse.json();
+
+    // Dynamically load Razorpay script to ensure it exists
+    const loadRazorpay = () => new Promise((resolve) => {
+      if ((window as any).Razorpay) return resolve(true);
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+
+    const isLoaded = await loadRazorpay();
+    if (!isLoaded) throw new Error("Razorpay SDK failed to load. Please check your connection.");
+
+    // 2. Initialize Razorpay Checkout
+    return new Promise((resolve, reject) => {
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_live_Sj16l6HuWfeLZR',
+        amount: order.amount,
+        currency: order.currency,
+        name: 'RouteWise Tactical',
+        description: `Mission Penalty Event ${eventId}`,
+        order_id: order.id,
+        handler: async function (response: any) {
+          try {
+            // 3. Verify payment on backend
+            const verifyRes = await fetch(`${API_CONFIG.baseURL}/api/events/${eventId}/verify-payment`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...headers },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+              })
+            });
+            
+            if (!verifyRes.ok) throw new Error("Payment verification failed");
+            resolve(await verifyRes.json());
+          } catch (err) {
+            reject(err);
+          }
+        },
+        prefill: {
+          name: "Commander",
+          email: "commander@routewise.app",
+        },
+        theme: {
+          color: "#ef4444" // Tactical red color
+        }
+      };
+      
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', function (response: any){
+        reject(new Error(response.error.description || "Payment failed"));
+      });
+      rzp.open();
+    });
   },
 
   getMissionHistory: async (userId: string | number) => {

@@ -9,4 +9,8 @@ router.post("/", eventController.createEvent);
 router.put("/:id", eventController.updateEvent);
 router.delete("/:id", eventController.deleteEvent);
 
+// Razorpay routes
+router.post("/:id/pay-penalty", eventController.createRazorpayOrder);
+router.post("/:id/verify-payment", eventController.verifyPayment);
+
 export default router;

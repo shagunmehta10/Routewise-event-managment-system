@@ -2,7 +2,11 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
 import { Navbar } from '../components/Navbar';
 import { eventAPI, routeAPI, paymentAPI } from '../../utils/api';
-import { Calendar, MapPin, ArrowLeft, Clock, AlertTriangle, Edit, Coins, Trash2, Smartphone, X, CheckCircle } from 'lucide-react';
+import { 
+  Calendar, MapPin, ArrowLeft, Clock, AlertTriangle, 
+  Edit, Coins, Trash2, Smartphone, X, CheckCircle,
+  CreditCard
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { RouteMap } from '../components/RouteMap';
 
@@ -82,7 +86,6 @@ export default function EventDetailsPage() {
     }
   }, [activeRouteIdx, alternatives]);
 
-  // ── Correct delete with modal confirmation ──
   const handleDeleteClick = () => {
     setDeleteConfirmText('');
     setShowDeleteModal(true);
@@ -103,15 +106,15 @@ export default function EventDetailsPage() {
     }
   };
 
-  const handlePayPenalty = async (method: string) => {
+  const handlePayPenalty = async () => {
     if (!id) return;
     setPayingPenalty(true);
     try {
-      await paymentAPI.payPenalty(id, 5000, method);
+      await paymentAPI.payPenalty(id, 5000);
       setEvent((prev: any) => ({ ...prev, mustDivert: false, penalty_paid: true }));
-      toast.success(`₹5,000 surcharge cleared via ${method === 'upi' ? 'GPay/UPI' : 'Card'}`);
-    } catch (error) {
-      toast.error('Payment failed. Please check your payment details in Settings.');
+      toast.success(`₹5,000 surcharge cleared securely via Razorpay`);
+    } catch (error: any) {
+      toast.error(error.message || 'Payment failed. Please try again.');
     } finally {
       setPayingPenalty(false);
     }
@@ -140,7 +143,6 @@ export default function EventDetailsPage() {
       <div className="live-bg-container" style={{ backgroundImage: 'linear-gradient(rgba(15,23,42,0.85), rgba(15,23,42,0.95)), url("/dashboard_bg.png")' }}></div>
       <Navbar />
 
-      {/* ── DELETE CONFIRMATION MODAL ── */}
       {showDeleteModal && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 9999,
@@ -231,7 +233,6 @@ export default function EventDetailsPage() {
       )}
 
       <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '3rem 1.5rem' }}>
-        {/* Top Nav Row */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
           <Link to="/events" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#94a3b8', textDecoration: 'none', fontWeight: 600 }}>
             <ArrowLeft size={18} /> Mission Archives
@@ -307,35 +308,23 @@ export default function EventDetailsPage() {
               <div style={{ fontSize: '2rem', fontWeight: 900, color: '#ef4444', marginBottom: '0.75rem' }}>₹ 5,000</div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button 
-                  onClick={() => handlePayPenalty('upi')}
+                  onClick={handlePayPenalty}
                   disabled={payingPenalty}
                   style={{ 
-                    background: '#f59e0b', color: 'white', border: 'none',
+                    background: '#ef4444', color: 'white', border: 'none',
                     padding: '0.6rem 1.1rem', borderRadius: '0.6rem',
                     fontWeight: 800, cursor: payingPenalty ? 'not-allowed' : 'pointer',
-                    fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.4rem'
+                    fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.4rem',
+                    boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)'
                   }}
                 >
-                  <Smartphone size={15} /> {payingPenalty ? 'Processing...' : 'Pay via GPay'}
-                </button>
-                <button 
-                  onClick={() => handlePayPenalty('card')}
-                  disabled={payingPenalty}
-                  style={{ 
-                    background: '#92400e', color: 'white', border: 'none',
-                    padding: '0.6rem 1.1rem', borderRadius: '0.6rem',
-                    fontWeight: 800, cursor: payingPenalty ? 'not-allowed' : 'pointer',
-                    fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.4rem'
-                  }}
-                >
-                  <CreditCard size={15} /> {payingPenalty ? 'Processing...' : 'Pay via Card'}
+                  <CreditCard size={15} /> {payingPenalty ? 'Initializing...' : 'Pay Surcharge Securely'}
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Penalty Paid Success Banner */}
         {event?.penalty_paid && (
           <div style={{
             background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.3)',
@@ -347,19 +336,18 @@ export default function EventDetailsPage() {
           </div>
         )}
 
-        {/* Main Card */}
         <div style={{ 
           background: 'rgba(30, 41, 59, 0.7)', backdropFilter: 'blur(20px)',
           borderRadius: '1.5rem', padding: '2.5rem',
           boxShadow: '0 20px 25px -5px rgba(0,0,0,0.4)',
           border: '1px solid rgba(255,255,255,0.08)', color: 'white'
         }}>
-          {/* Header */}
           <div style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '2rem', marginBottom: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
               <h1 style={{ fontSize: '2.5rem', fontWeight: 900, color: '#ffffff', margin: 0, flex: 1 }}>{event.name}</h1>
               <div style={{ display: 'flex', gap: '0.75rem', flexShrink: 0 }}>
-                {event.clashing && (
+                {/* FIX: Show clash badge only when this event is the one that must divert (2nd event) */}
+                {event.mustDivert && (
                   <div style={{ padding: '0.5rem 1rem', borderRadius: '9999px', background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontWeight: 800, fontSize: '0.72rem', textTransform: 'uppercase', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <AlertTriangle size={14} /> Route Clash
                   </div>
@@ -395,7 +383,6 @@ export default function EventDetailsPage() {
               <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#60a5fa', marginBottom: '1rem' }}>
                 Tactical Map
               </h3>
-              {/* RouteMap uses Leaflet / OpenStreetMap tiles directly - always works */}
               <RouteMap 
                 startCoords={event.startCoords} 
                 endCoords={event.endCoords} 
@@ -406,13 +393,13 @@ export default function EventDetailsPage() {
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              {/* Fleet Metrics */}
               <div style={{ background: 'rgba(255,255,255,0.04)', padding: '1.5rem', borderRadius: '1.25rem', border: '1px solid rgba(255,255,255,0.08)' }}>
                 <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#60a5fa', marginBottom: '1rem' }}>Fleet Metrics</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#64748b', fontWeight: 600, fontSize: '0.9rem' }}>Sector Overlap</span>
-                    <span style={{ color: event.clashing ? '#ef4444' : '#10b981', fontWeight: 800, fontSize: '0.9rem' }}>{event.clashing ? 'HIGH ⚠' : 'CLEAR ✓'}</span>
+                    {/* FIX: Show HIGH only when this event mustDivert (is the 2nd event) */}
+                    <span style={{ color: event.mustDivert ? '#ef4444' : '#10b981', fontWeight: 800, fontSize: '0.9rem' }}>{event.mustDivert ? 'HIGH ⚠' : 'CLEAR ✓'}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#64748b', fontWeight: 600, fontSize: '0.9rem' }}>Priority Status</span>
@@ -436,7 +423,6 @@ export default function EventDetailsPage() {
                 </div>
               </div>
 
-              {/* Route Options */}
               {alternatives.length > 1 && (
                 <div style={{ background: 'rgba(255,255,255,0.04)', padding: '1.5rem', borderRadius: '1.25rem', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <h3 style={{ fontSize: '1rem', fontWeight: 800, color: '#60a5fa', marginBottom: '1rem' }}>Route Options</h3>
@@ -459,7 +445,8 @@ export default function EventDetailsPage() {
                           <span style={{ fontWeight: 800, fontSize: '0.9rem', color: activeRouteIdx === idx ? '#60a5fa' : '#ffffff' }}>
                             {idx === 0 ? '🥇 Primary Route' : `🔀 Alternate ${idx}`}
                           </span>
-                          {idx === 0 && event.clashing && (
+                          {/* FIX: CLASH badge only on primary route when THIS event mustDivert (2nd event) */}
+                          {idx === 0 && event.mustDivert && (
                             <span style={{ fontSize: '0.65rem', color: '#ef4444', fontWeight: 900, background: 'rgba(239,68,68,0.12)', padding: '2px 6px', borderRadius: '4px' }}>
                               CLASH
                             </span>
@@ -478,15 +465,5 @@ export default function EventDetailsPage() {
         </div>
       </main>
     </div>
-  );
-}
-
-// Import CreditCard locally since we use it in this file
-function CreditCard({ size }: { size: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
-      <line x1="1" y1="10" x2="23" y2="10"></line>
-    </svg>
   );
 }

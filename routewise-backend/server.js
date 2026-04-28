@@ -17,6 +17,7 @@ import socketHandler from "./socket/socketHandler.js";
 import { setIO } from "./socket/socketUtils.js";
 import { ensureSettingsColumn } from "./controllers/authController.js";
 import { ensureVenuesTable } from "./controllers/venueController.js";
+import { clerkMiddleware } from "@clerk/express";
 
 const app = express();
 const httpServer = createServer(app);
@@ -37,6 +38,7 @@ socketHandler(io);
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(clerkMiddleware());
 
 // Routes
 app.use("/api/events", eventRoutes);
