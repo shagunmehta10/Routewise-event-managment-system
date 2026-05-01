@@ -45,27 +45,47 @@ export default function EventDetailsPage() {
         
         const eventData = thisEventWithClash || data;
 
-        if (!eventData.startCoords || !eventData.endCoords) {
+        let finalStart = eventData.startCoords;
+        let finalEnd = eventData.endCoords;
+
+        if (!finalStart || !finalEnd) {
           try {
-            const start = eventData.startCoords || await routeAPI.geocodeLocation(eventData.startLocation);
-            const end = eventData.endCoords || await routeAPI.geocodeLocation(eventData.endLocation);
+            finalStart = finalStart || await routeAPI.geocodeLocation(eventData.startLocation);
+            finalEnd = finalEnd || await routeAPI.geocodeLocation(eventData.endLocation);
+            
+            // Use known routable points as fallback to avoid OSRM NoRoute errors
+            if (!finalStart) finalStart = [30.2646, 77.9961]; // Graphic Era
+            if (!finalEnd) finalEnd = [30.3256, 78.0416]; // Clock Tower
+
             setEvent({
               ...eventData,
-              startCoords: start || [30.3165 + (Math.random() * 0.05), 78.0322 + (Math.random() * 0.05)],
-              endCoords: end || [30.3165 + (Math.random() * 0.05), 78.0322 + (Math.random() * 0.05)]
+              startCoords: finalStart,
+              endCoords: finalEnd
             });
           } catch {
-            setEvent({ ...eventData, startCoords: [30.3165, 78.0322], endCoords: [30.33, 78.05] });
+            finalStart = [30.3165, 78.0322];
+            finalEnd = [30.33, 78.05];
+            setEvent({ ...eventData, startCoords: finalStart, endCoords: finalEnd });
           }
         } else {
           setEvent(eventData);
         }
         
-        if (eventData.startCoords && eventData.endCoords) {
-          const altData = await routeAPI.getOSRMAlternatives(eventData.startCoords, eventData.endCoords, routeOptions);
-          if (altData && altData.routes) {
+        if (finalStart && finalEnd) {
+          const altData = await routeAPI.getOSRMAlternatives(finalStart, finalEnd, routeOptions);
+          if (altData && altData.routes && altData.routes.length > 0) {
             setAlternatives(altData.routes);
             setRouteInfo(altData.routes[activeRouteIdx] || altData.routes[0]);
+          } else {
+            // Fallback for events saved with unroutable coordinates
+            const backupStart: [number, number] = [30.2646, 77.9961];
+            const backupEnd: [number, number] = [30.3256, 78.0416];
+            setEvent((prev: any) => ({ ...prev, startCoords: backupStart, endCoords: backupEnd }));
+            const backupData = await routeAPI.getOSRMAlternatives(backupStart, backupEnd, routeOptions);
+            if (backupData && backupData.routes && backupData.routes.length > 0) {
+              setAlternatives(backupData.routes);
+              setRouteInfo(backupData.routes[activeRouteIdx] || backupData.routes[0]);
+            }
           }
         }
       } catch (err) {

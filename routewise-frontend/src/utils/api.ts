@@ -531,10 +531,32 @@ export const authAPI = {
       if (!response.ok) throw new Error("Failed to sync user");
       const data = await response.json();
       
-      // Store standard details in localStorage for backward compatibility with existing pages
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('user', JSON.stringify(data.user));
-      return data;
+      // Store standard details in localStorage for backward compatibility
+      // Record updates history
+      const existingUserJson = localStorage.getItem('user');
+      let updates = [];
+      if (existingUserJson) {
+        const existingUser = JSON.parse(existingUserJson);
+        updates = existingUser.updates || [];
+        // Compare fields and push changes
+        const fields = ['name', 'email', 'avatar_url'];
+        fields.forEach((field) => {
+          const oldVal = existingUser[field];
+          const newVal = userData[field];
+          if (oldVal !== newVal) {
+            updates.push({
+              timestamp: new Date().toISOString(),
+              field,
+              oldValue: oldVal,
+              newValue: newVal,
+            });
+          }
+        });
+      }
+      // Store combined user data with updates
+      const fullUser = { ...userData, updates };
+      localStorage.setItem('user', JSON.stringify(fullUser));
+      return response;
     } catch (e) {
       console.error("User sync error:", e);
       return null;
@@ -651,12 +673,30 @@ export const authAPI = {
     if (!USE_REAL_API) {
       await delay(500);
       const userJson = localStorage.getItem('user');
+      let existingUser = {};
+      let updates = [];
       if (userJson) {
-        const user = { ...JSON.parse(userJson), ...data };
-        localStorage.setItem('user', JSON.stringify(user));
-        return user;
+        existingUser = JSON.parse(userJson);
+        updates = (existingUser as any).updates || [];
       }
-      return data;
+      const oldUser = { ...existingUser };
+      const updatedUser = { ...oldUser, ...data };
+      // Record changes
+      Object.keys(data).forEach((field) => {
+        const oldVal = (oldUser as any)[field];
+        const newVal = data[field];
+        if (oldVal !== newVal) {
+          updates.push({
+            timestamp: new Date().toISOString(),
+            field,
+            oldValue: oldVal,
+            newValue: newVal,
+          });
+        }
+      });
+      (updatedUser as any).updates = updates;
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      return updatedUser;
     }
     const headers = await getAuthHeaders();
     const response = await fetch(`${API_CONFIG.baseURL}/api/auth/profile/${id}`, {
@@ -703,9 +743,20 @@ export const authAPI = {
     await delay(1000); // Simulate verification
     if (code.startsWith('RTW-')) {
       const reward = 500; // Mock reward
-      user.points = (user.points || 0) + reward;
+      const oldPoints = user.points || 0;
+      const newPoints = oldPoints + reward;
+      user.points = newPoints;
+      // Record update entry
+      const updates = user.updates || [];
+      updates.push({
+        timestamp: new Date().toISOString(),
+        field: 'points',
+        oldValue: oldPoints,
+        newValue: newPoints,
+      });
+      user.updates = updates;
       localStorage.setItem('user', JSON.stringify(user));
-      return { success: true, message: `Gift card claimed! +${reward} tactical points.`, points: user.points };
+      return { success: true, message: `Gift card claimed! +${reward} tactical points.`, points: newPoints };
     }
     throw new Error("Invalid or expired gift card code");
   },

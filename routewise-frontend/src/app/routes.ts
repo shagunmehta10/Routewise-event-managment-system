@@ -5,7 +5,7 @@ import Events from './pages/Events';
 import LiveMap from './pages/LiveMap';
 import AuthorityDashboard from './pages/AuthorityDashboard';
 import CreateEventPage from './pages/CreateEventPage';
-import ProfilePage from './pages/ProfilePage';
+
 import LoginPage from './pages/LoginPage';
 import NotFound from './pages/NotFound';
 import EventDetailsPage from './pages/EventDetailsPage';
@@ -63,10 +63,7 @@ export const router = createBrowserRouter([
     path: '/register-venue',
     Component: VenueRegistration,
   },
-  {
-    path: '/profile',
-    Component: ProfilePage,
-  },
+
   {
     path: '/settings',
     Component: SettingsPage,

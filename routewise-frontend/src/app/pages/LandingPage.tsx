@@ -1,11 +1,14 @@
 import { Link } from 'react-router';
 import { MapPin, ArrowRight, ShieldCheck, Zap } from 'lucide-react';
 import '../styles/dashboard.css';
+import { TrafficTicker } from '../components/TrafficTicker';
 
 export default function LandingPage() {
   return (
-    <div style={{ minHeight: '100vh', color: 'white', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
-      <div className="live-bg-container" style={{ backgroundImage: 'linear-gradient(rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.8)), url("/landing_bg.png")' }}></div>
+    <>
+      <TrafficTicker />
+      <div style={{ minHeight: 'calc(100vh - 36px)', color: 'white', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+        <div className="live-bg-container" style={{ backgroundImage: 'linear-gradient(rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.8)), url("/landing_bg.png")' }}></div>
       <header style={{ padding: '1.5rem 3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.5rem', fontWeight: 'bold' }}>
           <MapPin color="#3b82f6" size={28} />
@@ -41,6 +44,7 @@ export default function LandingPage() {
       <footer style={{ padding: '2rem', textAlign: 'center', color: '#64748b', fontSize: '0.9rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
         © 2026 RouteWise Intelligent Event Management. All rights reserved.
       </footer>
-    </div>
+      </div>
+    </>
   );
 }

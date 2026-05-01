@@ -6,6 +6,7 @@ import { useUser, UserButton } from '@clerk/clerk-react';
 import '../styles/navbar.css';
 
 import { TrafficTicker } from './TrafficTicker';
+import { HistoryPopover } from './HistoryPopover';
 
 export function Navbar() {
   const location = useLocation();
@@ -57,10 +58,6 @@ export function Navbar() {
                 <Settings size={18} />
                 <span>Settings</span>
               </Link>
-              <Link to="/profile" className={`nav-link ${location.pathname === '/profile' ? 'active' : ''}`}>
-                <User size={18} />
-                <span>Profile</span>
-              </Link>
             </>
           )}
           <Link to="/venues" className={`nav-link ${location.pathname === '/venues' ? 'active' : ''}`}>
@@ -75,6 +72,7 @@ export function Navbar() {
 
         {isSignedIn ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <HistoryPopover />
             <button onClick={handleShare} className="share-icon-btn" title="Share RouteWise">
               <Share2 size={18} />
             </button>

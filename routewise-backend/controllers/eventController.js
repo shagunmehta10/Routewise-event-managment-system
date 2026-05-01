@@ -3,12 +3,40 @@ import { emitRefresh } from "../socket/socketUtils.js";
 import crypto from "crypto";
 import Razorpay from "razorpay";
 
-// Initialize Razorpay
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || '',
-  key_secret: process.env.RAZORPAY_KEY_SECRET || '',
-});
+let razorpay;
 
+function getRazorpayClient() {
+  const rawKeyId = process.env.RAZORPAY_KEY_ID;
+  const rawKeySecret = process.env.RAZORPAY_KEY_SECRET;
+  const keyId = rawKeyId && rawKeyId.trim();
+  const keySecret = rawKeySecret && rawKeySecret.trim();
+  if (!keyId || !keySecret) {
+    console.warn('Razorpay credentials missing or empty. Skipping Razorpay integration.');
+    return null;
+  }
+
+  if (!razorpay) {
+    razorpay = new Razorpay({
+      key_id: keyId,
+      key_secret: keySecret,
+    });
+  }
+
+  return razorpay;
+}
+
+function ensureRazorpayConfigured(res) {
+  const client = getRazorpayClient();
+
+  if (!client) {
+    res.status(503).json({
+      message: "Payment service is not configured. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.",
+    });
+    return null;
+  }
+
+  return client;
+}
 
 // Hospital locations for risk detection
 const HOSPITALS = [
@@ -280,6 +308,8 @@ export const deleteEvent = async (req, res) => {
 export const createRazorpayOrder = async (req, res) => {
   const { id } = req.params;
   const { amount } = req.body;
+  const razorpayClient = ensureRazorpayConfigured(res);
+  if (!razorpayClient) return;
   
   if (!amount) {
     return res.status(400).json({ message: "Amount is required" });
@@ -292,7 +322,7 @@ export const createRazorpayOrder = async (req, res) => {
       receipt: `receipt_event_${id}`,
     };
     
-    const order = await razorpay.orders.create(options);
+    const order = await razorpayClient.orders.create(options);
     if (!order) return res.status(500).json({ message: "Error creating Razorpay order" });
     
     res.json(order);
@@ -305,11 +335,18 @@ export const createRazorpayOrder = async (req, res) => {
 export const verifyPayment = async (req, res) => {
   const { id } = req.params;
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  
+  if (!keySecret) {
+    return res.status(503).json({
+      message: "Payment service is not configured. Please set RAZORPAY_KEY_SECRET.",
+    });
+  }
   
   try {
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSign = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || '')
+      .createHmac("sha256", keySecret)
       .update(sign.toString())
       .digest("hex");
 
