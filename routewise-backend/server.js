@@ -1,7 +1,6 @@
 import dotenv from "dotenv";
 dotenv.config({ path: "./.env" });
 
-console.log("ENV TEST:", process.env.DATABASE_URL);
 
 import express from "express";
 import cors from "cors";
